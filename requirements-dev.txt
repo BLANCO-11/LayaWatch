@@ -1,0 +1,4 @@
+pytest
+ruff
+# dev-only; playwright browsers install in Phase 4
+playwright

@@ -11,7 +11,7 @@ Audience: whoever runs LayaWatch on a machine they own.
 | RAM | 4 GB | engine checkpoints dominate (english ~800 MB, multilingual ~1.3 GB); LayaWatch adds <= 120 MB |
 | Disk | 4 GB | model cache ~2.3 GB plus <= 200 MB of state |
 | OS | Linux (tested), macOS (dev) | systemd or Docker for supervision |
-| Python | 3.10 | matches the engine's supported range |
+| Python | 3.12 | matches the engine's supported range |
 | Docker | 24+ | only for the container path |
 
 ## 2. Install paths

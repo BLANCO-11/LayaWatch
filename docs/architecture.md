@@ -336,7 +336,7 @@ never starts with a partially valid config.
 ```mermaid
 flowchart LR
   U[Browser] --> R[reverse proxy optional]
-  C[API clients] --> R --> L["layawatch container<br/>python:3.10-slim + torch + laya + web/out"]
+  C[API clients] --> R --> L["layawatch container<br/>python:3.12-slim + torch + laya + web/out"]
   L --> V[("volume: /data<br/>state.sqlite3, secret.key, hf cache")]
 ```
 
@@ -345,7 +345,7 @@ observability recorder would instrument the proxy hop instead of an in-process c
 future direction, not a phase deliverable.
 
 Image build is multi-stage: `node:24-slim` runs `npm ci && next build` and exports `web/out`; the
-runtime stage is `python:3.10-slim` plus torch CPU plus the `laya` package plus `layawatch/` plus
+runtime stage is `python:3.12-slim` plus torch CPU plus the `laya` package plus `layawatch/` plus
 `web/out`. Node never ships in the runtime image.
 
 ## 9. Failure modes and behavior

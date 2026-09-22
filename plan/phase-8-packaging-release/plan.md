@@ -35,7 +35,7 @@ signing and notarization, Windows packaging, a hosted documentation site, split 
 ## Deliverables
 
 ```
-deploy/Dockerfile            multi-stage: node:24-slim builds web/out, python:3.10-slim runtime, non-root, read-only rootfs, /data volume, healthcheck
+deploy/Dockerfile            multi-stage: node:24-slim builds web/out, python:3.12-slim runtime, non-root, read-only rootfs, /data volume, healthcheck
 deploy/compose.yaml          single layawatch service, volume, healthcheck, optional caddy TLS profile
 deploy/Caddyfile             reverse proxy config for the caddy compose profile
 deploy/.env.example          every documented variable with safe defaults and inline comments
@@ -58,13 +58,13 @@ plan/phase-8-packaging-release/{evidence,issues,decisions,outcome}.md   gate art
 1. `deploy/Dockerfile` build stage: `FROM node:24-slim AS web`, copy `web/package.json` and
    `web/package-lock.json`, `npm ci`, `npm run build`, export `web/out`; no other repo files enter
    this stage so the layer cache survives Python changes.
-2. `deploy/Dockerfile` runtime stage: `FROM python:3.10-slim`, install the pinned torch CPU wheel and
+2. `deploy/Dockerfile` runtime stage: `FROM python:3.12-slim`, install the pinned torch CPU wheel and
    the pinned `laya` wheel (versions pinned per `plan/README.md` R-07), copy `layawatch/`, the built
    `web/out` and `requirements` metadata, create user `layawatch` (uid 10001, no login shell), set
    `ENV LAYA_STATE_DIR=/data LAYWATCH_BIND=0.0.0.0`, `VOLUME /data`, `EXPOSE 8050`,
    `HEALTHCHECK` polling `GET /healthz` with a start period covering model warmup, `ENTRYPOINT
    ["python", "-m", "layawatch"]`. Node and npm must not appear in this stage; the final image delta
-   over the `python:3.10-slim` plus torch baseline must stay <= 50 MB (resource budget table,
+   over the `python:3.12-slim` plus torch baseline must stay <= 50 MB (resource budget table,
    `plan/README.md` section 4).
 3. Container hardening verification: run the image with `--read-only`, `--cap-drop ALL`,
    `--security-opt no-new-privileges` and a named volume at `/data`; confirm `/healthz` returns 200,
@@ -121,7 +121,7 @@ plan/phase-8-packaging-release/{evidence,issues,decisions,outcome}.md   gate art
     one grep for `LAYA_ADMIN_TOKEN`, `/admin/api`, `legacy/` and `api_keys.json`.
 12. `scripts/budget_check.py` hard gate: keep the four Phase 7 subcommands (`rss`, `disk`,
     `coldstart`, `idle-cpu`) at their hard thresholds and add `image` comparing the built runtime
-    image size against the `python:3.10-slim` plus torch baseline (<= 50 MB delta, printed as
+    image size against the `python:3.12-slim` plus torch baseline (<= 50 MB delta, printed as
     baseline, delta, verdict); add an `all` mode running every subcommand and exiting non-zero on the
     first failure; update `docs/operations.md` section 8 to list the subcommands actually shipped.
 13. `scripts/e2e_smoke.py`: against a running instance (fresh container or local), perform the full
@@ -156,7 +156,7 @@ plan/phase-8-packaging-release/{evidence,issues,decisions,outcome}.md   gate art
    http://127.0.0.1:8050/healthz` returns `200`, the setup wizard creates the first owner, and the
    console loads in the browser; the transcript is in evidence.md.
 2. No Node in the runtime image: `docker run --rm <image> node --version` fails with command not
-   found, and `scripts/budget_check.py image` exits 0 with the delta over `python:3.10-slim` plus
+   found, and `scripts/budget_check.py image` exits 0 with the delta over `python:3.12-slim` plus
    torch <= 50 MB, both printed in evidence.
 3. Hardened container: the image runs with `--read-only`, `--cap-drop ALL` and a writable volume at
    `/data`, serves `/healthz` 200, runs as uid 10001 (non-root), and writes state only under `/data`;

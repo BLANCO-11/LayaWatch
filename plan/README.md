@@ -43,7 +43,7 @@ Product name: **LayaWatch**. Origin repository: `https://github.com/BLANCO-11/La
 |---|---|---|
 | Runtime deps added by LayaWatch | none (Python stdlib only) | keeps the venv that already carries torch/transformers stable |
 | Frontend at runtime | static files only | Next.js is a build-time dependency (`output: "export"`) |
-| Python | 3.10 (matches existing `.venv`) | engine compatibility |
+| Python | 3.12 | engine compatibility |
 | Storage | SQLite (WAL), single file under `LAYA_STATE_DIR` | backup = copy one directory |
 | Bind address | `127.0.0.1` by default | exposure is a deliberate reverse-proxy decision |
 | Engine dependency | `laya` package (torch CPU), models from HF cache | already provisioned locally |
@@ -54,7 +54,7 @@ Product name: **LayaWatch**. Origin repository: `https://github.com/BLANCO-11/La
 |---|---|---|
 | LayaWatch RSS overhead (excluding model weights) | <= 120 MB | `/proc/self/status` VmRSS delta after warmup |
 | LayaWatch disk (excluding HF model cache) | <= 200 MB | `du -sh` on state dir at 10k traces |
-| Production image delta over `python:3.10-slim` + torch | <= 50 MB | image size diff |
+| Production image delta over `python:3.12-slim` + torch | <= 50 MB | image size diff |
 | Idle CPU | < 2 % | `top` 60 s average with UI closed |
 | Cold start to first served request | <= 3 s plus model load | startup log timestamps |
 | Recording overhead on engine latency | <= 3 ms p95 | `scripts/bench.py overhead` |

@@ -1,22 +1,5 @@
-# Phase 0 - Foundation and scaffolding: issues
+# Phase 0 issues
 
-Status: not started
-Severity: blocker | major | minor | nit. Ids: P0-I<NN>.
-
-## Open
-
-| Id | Severity | Summary | Owner | Opened | Notes |
+| ID | Severity | Summary | Status | Owner | Notes |
 |---|---|---|---|---|---|
-| | | | | | |
-
-## Closed
-
-| Id | Severity | Summary | Resolution | Closed |
-|---|---|---|---|---|
-| | | | | |
-
-## Deferred
-
-| Id | Summary | Why deferred | Revisit in |
-|---|---|---|---|
-| | | | |
+| P0-I1 | minor | docs/architecture.md section 6 has no rows for `LAYWATCH_SOCKET_TIMEOUT` and `LAYWATCH_LOG_LEVEL`, which config.py implements (P0-D4) | open | next docs pass | the config test hardcodes the documented variable list, so adding the rows later must update both together |

@@ -1,6 +1,6 @@
 # Phase 0 - Foundation and scaffolding
 
-Status: planned
+Status: complete (2026-09-22)
 Depends on: nothing
 Estimated effort: 2 to 3 days
 Deliverable: a repository that starts, serves, migrates and tests, with the design tokens already

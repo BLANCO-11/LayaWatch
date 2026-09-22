@@ -1,15 +1,13 @@
-# Phase 0 - Foundation and scaffolding: decisions
+# Phase 0 decisions
 
-Status: not started
-Decision ids are global (D-0NN) and never reused. Each entry records context, alternatives and
-consequences so a later reader does not have to reconstruct the reasoning.
+Phase-local ids (`P0-Dn`); cross-phase decisions keep the `plan/README.md` numbering.
 
-## D-0NN: title
-
-- Date:
-- Status: proposed | accepted | superseded by D-0NN
-- Context:
-- Decision:
-- Alternatives considered:
-- Consequences:
-- Evidence / links:
+| ID | Title | Date | Status | Rationale | Alternatives | Consequences |
+|---|---|---|---|---|---|---|
+| P0-D1 | uv-managed CPython 3.12.14 venv; GNU Make installed to `~/.local/bin` | 2026-09-22 | accepted | the machine had neither Python 3.12 nor make; uv fetched 3.12 in seconds, make came from the Ubuntu package extracted without root | apt via sudo (no password available); pyenv build (slow) | `.venv` is 3.12-only; the old 3.10 env is preserved as `.venv-old310` for reference; CI installs make implicitly (ubuntu-latest ships it) |
+| P0-D2 | Migration runner: sorted `NNNN_name.sql` files, one transaction each, bookkeeping table, pre-check `SchemaTooNewError` | 2026-09-22 | accepted | implements D-004; atomic per-file apply keeps the bookkeeping row in the same transaction as its DDL | single big schema.sql replay (no upgrade path); ORM (dependency) | future phases add files only; a newer database refuses to start with instructions (verified live) |
+| P0-D3 | Theme tokens use `[data-theme]` attribute selectors on any element, `:root` defaults to the mock's dark theme | 2026-09-22 | accepted | matches the approved mock byte-for-byte while allowing both themes nested side by side in the preview; feeds the Phase 4 pre-paint script (D-012) | `:root[data-theme=]` only (mock's form; cannot nest); CSS classes (worse semantics for the export) | `tokens.css` is the only file with hex values; tokens-preview can render both themes in one page |
+| P0-D4 | Config adds `LAYWATCH_SOCKET_TIMEOUT` and `LAYWATCH_LOG_LEVEL`; `LAYWATCH_BODY` maps to `max_body_bytes`; `web_root` fixed at `web/out` | 2026-09-22 | accepted | the architecture section 6 table lacks rows for the timeout and level that the phase plan requires; gap recorded in issues.md rather than editing docs from a worker | hardcode timeout/level (not operator-tunable); invent different names | both variables behave like every other row; docs gain the two rows at the next docs pass (issue P0-I1) |
+| P0-D5 | Stable error codes beyond the documented ones: `method_not_allowed`, `invalid_content_length`, `length_required`, `payload_too_large`, `not_found`, `internal_error`, `invalid_json` | 2026-09-22 | accepted | envelope contract says codes are stable snake_case identifiers; these names are the obvious ones and are now pinned by tests | reuse generic 400/500 without codes (violates envelope contract) | later phases must not rename them; api-reference may list them when docs are next edited |
+| P0-D6 | No `Content-Length` on 204 and 304 responses | 2026-09-22 | accepted | RFC 7230 3.3.2 forbids it on 204; the original phase pin ("every response") was wrong and the implementing worker flagged it | keep the literal pin (interoperability bug) | enforced centrally in `server.py` write path plus router dispatch; HEAD-on-GET keeps its length |
+| P0-D7 | `FakeAdapter` drives `/healthz` until the real adapter lands in Phase 1; `route()` returns `reason` while `predict` exposes `route_reason` | 2026-09-22 | accepted | phase 0 ships no engine; `scripts/smoke_laya.py` evidences `routing.reason` on the real router and api-reference section 4 pins `route_reason` only for predict | invent a `route_reason` in route() (contradicts the real router evidence); block phase 0 on the real adapter | Phase 1 wires `RealAdapter` and must keep both key names; acceptance criterion 1 is satisfied with the fake |
