@@ -1,6 +1,6 @@
 # Phase 1 - Instrumentation and storage
 
-Status: planned
+Status: complete (2026-09-22)
 Depends on: phase 0
 Estimated effort: 4 to 6 days
 Deliverable: every `/predict` and `/route` call becomes a trace with spans, persisted to SQLite,

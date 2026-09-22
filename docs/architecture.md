@@ -312,6 +312,8 @@ Existing engine variables keep working. New variables are prefixed `LAYWATCH_`.
 | `LAYWATCH_ENGINE_MAX_INFLIGHT` | `4` | forward passes allowed to queue |
 | `LAYWATCH_ENGINE_QUEUE_MAX` | `16` | hard queue bound before shedding |
 | `LAYWATCH_MAX_BODY` | `4194304` | request body cap, bytes |
+| `LAYWATCH_SOCKET_TIMEOUT` | `30` | per-connection socket timeout, seconds |
+| `LAYWATCH_LOG_LEVEL` | `info` | stderr level: `debug`, `info`, `warning`, `error` |
 
 Validation rules: unknown role or malformed value fails startup with a clear message; the process
 never starts with a partially valid config.
