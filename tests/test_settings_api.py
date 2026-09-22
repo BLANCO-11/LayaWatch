@@ -11,7 +11,7 @@ from layawatch.http.router import Router
 from layawatch.http.types import Request, Response
 from layawatch.store import db
 
-NOTE = "runtime settings override config where present; write path lands with roles (Phase 3)"
+NOTE = "runtime settings override config where present; writes gated by settings.write (admin+)"
 
 
 def _build(tmp_path: Path) -> tuple[Router, Config]:

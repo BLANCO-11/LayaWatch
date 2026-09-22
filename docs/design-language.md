@@ -389,7 +389,7 @@ role badge.
 ### 4.31 Audit row
 
 Table row variant: mono timestamp, actor (avatar plus name), action verb (`key.created`,
-`model.loaded`, `user.role_changed`), target mono id, result badge. Read-only, filterable by actor and
+`model.load`, `user.role_changed`), target mono id, result badge. Read-only, filterable by actor and
 action, never editable.
 
 ### 4.32 Status dot

@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 #: Key fragments that mark a settings row as secret-like; such rows never leave the server.
 _SECRET_KEY_FRAGMENTS = ("secret", "token", "password")
 
-#: Read-view note: precedence of the two sources and the Phase 3 write boundary.
-_NOTE = "runtime settings override config where present; write path lands with roles (Phase 3)"
+#: Read-view note: precedence of the two sources and the write gate (POST landed).
+_NOTE = "runtime settings override config where present; writes gated by settings.write (admin+)"
 
 #: Values a stored TEXT row accepts as true (mirrors api/auth.py's settings readers).
 _TRUE_TEXT = frozenset({"1", "true", "yes", "on"})

@@ -59,6 +59,11 @@ Shedding vs throttling: **throttling** (per-subject bucket) means "you are too f
 (global inflight cap) means "the engine is saturated". Both return `429`, but the error codes differ
 (`rate_limited` vs `engine_saturated`) and the UI shows them as separate series.
 
+**Status**: enforcement is phase-scoped out. The management surface (7) is live and writes real
+`settings` rows, but bucket checks do not yet run in the request path - the usage/reset buckets stay
+empty until enforcement wires in. The login backoff row (api/auth, `auth.login_limit`) is live and
+applies `login`/`login_window` edits on the spot.
+
 ## 4. Response contract
 
 ```http
@@ -93,7 +98,7 @@ Content-Type: application/json
 
 | Control | Type | Effect |
 |---|---|---|
-| Enable rate limiting | switch | master switch (`settings.ratelimit_enabled`) |
+| Enable rate limiting | switch | master switch (`ratelimit.enabled`, read per request) |
 | Engine per key | number, `0` = unlimited | default for new keys |
 | Engine per IP | number | unauthenticated flood guard |
 | Login attempts | number per window | with a window select (`5m`, `15m`, `1h`) |
@@ -127,10 +132,10 @@ per row. This panel is the reason limits are described as "managed".
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/ratelimits` | viewer+ | effective policy (global defaults plus per-key overrides) |
-| `POST` | `/api/v1/ratelimits` | admin+ | update policy fields (partial update, validated) |
-| `GET` | `/api/v1/ratelimits/usage` | viewer+ | live bucket usage for the panel |
-| `POST` | `/api/v1/ratelimits/reset` | admin+ | `{subject, scope}` or `{all: true}` resets buckets |
+| `GET` | `/api/v1/ratelimits` | viewer+ | effective policy (settings rows over config defaults) plus per-key overrides (`keys`) |
+| `POST` | `/api/v1/ratelimits` | admin+ | partial update of the policy fields (validated, audited `ratelimit.updated`) |
+| `GET` | `/api/v1/ratelimits/usage` | viewer+ | `{items: [{subject, scope, used, limit, resets_in}], next_cursor, total_estimate}`, top 10 by usage ratio |
+| `POST` | `/api/v1/ratelimits/reset` | admin+ | `{subject, scope}` or `{all: true}` resets buckets, answers `{"reset": n}` (audited `ratelimit.reset`) |
 | `PATCH` | `/api/v1/keys/{id}` | admin+ | set `rate_limit_per_min` and `burst` on a key |
 
 ## 8. Configuration defaults
