@@ -96,7 +96,7 @@ tests/                         contract tests per resource, SSE framing, shim ma
 | Risk | Mitigation |
 |---|---|
 | N+1 queries on trace detail | one query per table, batch by `trace_id IN (...)`, asserted by a query-count test |
-| SSE blocking the threading server under many clients | short writes with socket timeout, per-session cap, heartbeat that drops dead clients |
+| SSE blocking the uvicorn event loop under many clients | producer off the loop with a bounded queue (backpressure), per-session cap, heartbeat that drops dead clients |
 | Shim mapping drift from the legacy shapes | contract tests compare shim output against recorded legacy responses captured before the change |
 | Pagination instability while inserting | keyset pagination on `(ts_start, id)` only; no offset queries |
 

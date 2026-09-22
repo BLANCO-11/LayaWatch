@@ -120,7 +120,7 @@ without its record. Login failures record the attempted email and the ip, never 
 | Log injection | client-supplied fields in logs | control characters stripped, message length capped, structured fields escaped |
 | SQL injection | filters | every query is parameterized; filters are validated against an allowlist of columns |
 | Path traversal on static serving | `/` handler | resolved path must stay inside `web/out`, no symlink escape, explicit extension allowlist |
-| Supply chain | dependencies | zero added runtime dependencies; dev dependencies pinned in `package-lock.json` and `requirements-dev.txt` with hash verification in CI |
+| Supply chain | dependencies | runtime dependencies limited to FastAPI, uvicorn and httpx (declared in `pyproject.toml`); dev dependencies pinned in `package-lock.json` and `requirements-dev.txt` with hash verification in CI |
 
 ## 7. Data at rest and privacy
 

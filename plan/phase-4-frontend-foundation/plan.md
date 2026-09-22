@@ -29,7 +29,8 @@ Out: view contents and data wiring for Overview, Traces, Metrics, Logs (Phase 5)
 Checkpoints, API Keys, Users, Audit, Settings contents and the Settings `system | dark | light`
 select (Phase 6); SSE data rendering beyond the shell live pill connection state (Phase 5);
 performance optimization beyond the initial bundle ceiling (Phase 7); any Python runtime change or
-new runtime dependency (Node stays build-time only, per decisions D-001 and D-002).
+new runtime dependency beyond the D-001 stack (FastAPI, uvicorn, httpx; Node stays build-time only,
+per decisions D-001 and D-002).
 
 ## Deliverables
 

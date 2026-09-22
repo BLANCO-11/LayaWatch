@@ -41,7 +41,7 @@ Product name: **LayaWatch**. Origin repository: `https://github.com/BLANCO-11/La
 
 | Constraint | Value | Rationale |
 |---|---|---|
-| Runtime deps added by LayaWatch | none (Python stdlib only) | keeps the venv that already carries torch/transformers stable |
+| Runtime deps added by LayaWatch | FastAPI, uvicorn, httpx (declared in `pyproject.toml`) | three small wheels; keeps the venv that already carries torch/transformers stable |
 | Frontend at runtime | static files only | Next.js is a build-time dependency (`output: "export"`) |
 | Python | 3.12 | engine compatibility |
 | Storage | SQLite (WAL), single file under `LAYA_STATE_DIR` | backup = copy one directory |
@@ -66,7 +66,7 @@ Single process, four moving parts:
 ```mermaid
 flowchart LR
   subgraph P[layawatch process]
-    H[HTTP server<br/>ThreadingHTTPServer] --> M[Middleware<br/>trace context, auth, rate limits]
+    H[HTTP layer<br/>FastAPI app + uvicorn] --> M[Middleware<br/>trace context, auth, rate limits]
     M --> E[Engine adapter<br/>laya Router/Agent]
     M --> R[Recorder<br/>ring buffers]
     R --> W[SQLite writer thread]
@@ -81,8 +81,9 @@ flowchart LR
 
 Decisions that shape everything else (full text in `docs/architecture.md`):
 
-- **D-001** Python stdlib HTTP server, no FastAPI/uvicorn. Keeps the added dependency count at zero
-  and matches the existing `serve.py` style.
+- **D-001** Superseded 2026-09-22: the HTTP layer is a FastAPI app factory (`layawatch/app.py`)
+  served by the uvicorn runner (`layawatch/http/server.py`); the original zero-dependency stdlib
+  server choice is retired. FastAPI, uvicorn and httpx are the only added runtime dependencies.
 - **D-002** Next.js static export served by the same Python process. Node is build-time only.
 - **D-003** SQLite WAL with a single writer thread, batched inserts, and rollup tables for charts.
 - **D-004** Observability model shaped after Langfuse (trace, observation, score) but trimmed to
@@ -161,7 +162,7 @@ A phase is done only when all of the following hold:
 | R-01 | Recording every request inflates latency or memory | slow engine, OOM | ring buffers with fixed caps, batched writes, `LAYA_TRACE_SAMPLE`, `LAYWATCH_RECORD=0` lever, budget check in P1 and P7 |
 | R-02 | torch CPU inference serialized by `_predict_lock` distorts queue metrics | misleading charts | measure queue wait explicitly as a span, document single-worker semantics in the UI |
 | R-03 | Payload capture leaks PII into SQLite | compliance | capture off by default, truncation + redaction list, documented in security.md |
-| R-04 | Stdlib HTTP server limits (no async, manual SSE) | dev cost | SSE is simple chunked writes, keep handlers short; documented escape hatch to uvicorn if budgets allow |
+| R-04 | FastAPI/uvicorn upgrade changes wire behavior | subtle HTTP regressions | wire behavior (411/413 guards, gzip, `on_sent` after body send) concentrated in the app bridge `layawatch/app.py`; version floors in `pyproject.toml` |
 | R-05 | Static export cannot do server-side auth redirects | auth UX | login is an API call, session cookie, client-side guard plus server-side 401 on every API call |
 | R-06 | Model load/unload from the UI can thrash memory | OOM | single action at a time, confirm dialog, RAM guard, audit entry |
 | R-07 | Vendored engine drift (`laya` in `.venv`, not in repo) | unreproducible builds | pin engine version in docs and lock file, document install path in operations.md |

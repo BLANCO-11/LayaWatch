@@ -23,12 +23,13 @@ Out: tracing, storage writer, API resources beyond health and meta, auth, any Ne
 ## Deliverables
 
 ```
-pyproject.toml                 metadata, ruff and pytest config, no runtime deps
+pyproject.toml                 metadata, ruff and pytest config, deps: fastapi, uvicorn, httpx
 Makefile                       dev, test, lint, web-build, smoke, migrate targets
 layawatch/__main__.py          entrypoint, --migrate-only flag
 layawatch/config.py            env parsing, defaults, validation
 layawatch/log.py               ring-buffer log sink plus stderr lines
-layawatch/http/server.py       ThreadingHTTPServer, graceful shutdown, timeouts
+layawatch/app.py               FastAPI app factory: 411/413 guards, gzip, on_sent hook
+layawatch/http/server.py       uvicorn runner, graceful shutdown, Server: LayaWatch header
 layawatch/http/router.py       path to handler table, 404/405, error envelope
 layawatch/http/static.py       web/out serving, ETag, cache headers, route resolution
 layawatch/store/db.py          WAL connection factory, busy timeout, pragmas
@@ -57,8 +58,10 @@ tests/                         config, migrations, static, router tests
 5. Implement `store/db.py` and the migration runner: apply `migrations/*.sql` in filename order inside
    a transaction, record in `schema_migrations`, refuse to start when the database version is newer
    than the code. `--migrate-only` applies and exits.
-6. Implement `http/server.py` and `http/router.py`: routing table, JSON helpers, error envelope,
-   `X-Request-Id` generation, body size limit, socket timeout, `SIGTERM` graceful shutdown.
+6. Implement the FastAPI app factory `layawatch/app.py` (catch-all dispatch, 411/413 body guards,
+   inbound `X-Request-Id` validation, gzip for large JSON, `on_sent` hook after body send) and the
+   uvicorn runner `http/server.py` (`SIGTERM` graceful shutdown, `Server: LayaWatch` header), plus
+   `http/router.py`: routing table, JSON helpers, error envelope, `X-Request-Id` generation.
 7. Implement `http/static.py`: serve `web/out` when present, ETag and `If-None-Match`, immutable cache
    for `/_next/static/*`, `no-cache` for HTML, extension allowlist, path traversal rejection, 404 page,
    and the build-instructions page when `web/out` is absent.

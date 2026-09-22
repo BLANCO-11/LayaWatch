@@ -125,7 +125,7 @@ plan/phase-8-packaging-release/{evidence,issues,decisions,outcome}.md   gate art
     baseline, delta, verdict); add an `all` mode running every subcommand and exiting non-zero on the
     first failure; update `docs/operations.md` section 8 to list the subcommands actually shipped.
 13. `scripts/e2e_smoke.py`: against a running instance (fresh container or local), perform the full
-    operator path with stdlib `urllib` and a cookie jar: `POST /api/v1/auth/login`, create an API key
+    operator path with `urllib` and a cookie jar: `POST /api/v1/auth/login`, create an API key
     via `POST /api/v1/keys`, arm key auth, `POST /predict` with a fixed English fixture, poll
     `GET /api/v1/traces/{id}` until the trace and its spans are visible, `POST /api/v1/models/load`
     then `POST /api/v1/models/unload`, log out; assert each step's status code and JSON shape, print

@@ -22,13 +22,16 @@ Audience: whoever runs LayaWatch on a machine they own.
 git clone https://github.com/BLANCO-11/LayaWatch.git
 cd LayaWatch
 python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt          # dev only; runtime needs no pip packages
+pip install -r requirements-dev.txt          # dev tooling (pytest, ruff, playwright)
+pip install fastapi uvicorn httpx             # HTTP layer runtime deps (pyproject.toml)
 pip install <laya wheel or path>             # engine, pinned version
 cd web && npm ci && npm run build && cd ..   # produces web/out
 python -m layawatch --port 8050
 ```
 
-`web/out` is optional for development: without it the API runs and `/` returns build instructions.
+`python -m layawatch` builds the FastAPI app and serves it with uvicorn in the same process —
+there is no separate server command. `web/out` is optional for development: without it the API runs
+and `/` returns build instructions.
 
 ### 2.2 Container (recommended for hosting)
 

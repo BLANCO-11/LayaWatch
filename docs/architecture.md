@@ -11,14 +11,15 @@ LayaWatch is **one Python process** that does four jobs:
 3. serves the console UI and its JSON API,
 4. persists everything to a single SQLite file.
 
-There is no message broker, no separate frontend server, no Node at runtime and no added Python
-dependency. The engine (`laya`, torch CPU) is imported in-process.
+There is no message broker, no separate frontend server and no Node at runtime. The HTTP layer is
+FastAPI + uvicorn; the only added Python dependencies are `fastapi`, `uvicorn` and `httpx`. The
+engine (`laya`, torch CPU) is imported in-process.
 
 ```mermaid
 flowchart TB
   subgraph proc[layawatch process]
     direction TB
-    SRV["http/server.py<br/>ThreadingHTTPServer + routes"]
+    SRV["app.py + http/server.py<br/>FastAPI + uvicorn"]
     MW["http/middleware.py<br/>request id, auth, trace context, timing"]
     ENG["engine/adapter.py<br/>laya Router/Agent, model lifecycle, _predict_lock"]
     REC["obs/recorder.py<br/>span recorder + ring buffers"]
@@ -45,12 +46,12 @@ layawatch/
   __main__.py          entrypoint: parse env, build app, serve
   config.py            typed env config, defaults, validation, single source of truth
   log.py               structured log lines, level filter, ring buffer sink
+  app.py               FastAPI app factory: catch-all dispatch, 411/413 guards, gzip, on_sent hook
   http/
-    server.py          ThreadingHTTPServer, connection handling, graceful shutdown
+    server.py          uvicorn runner for the FastAPI app, graceful shutdown, Server header
     router.py          path -> handler table, method dispatch, 404/405
     middleware.py      request id, body limits, auth gates, timing, error envelope
     static.py          serves web/out, content types, ETag, immutable asset cache
-    sse.py             chunked event stream, heartbeat, client registry
   obs/
     recorder.py        span context, timers, trace assembly, in-memory rings
     vocabulary.py      canonical span names and attributes
@@ -83,7 +84,7 @@ layawatch/
 
 | Thread | Count | Responsibility |
 |---|---|---|
-| request handler | one per connection (threading server) | parse, auth, engine call, respond |
+| request handler | worker threads via anyio (uvicorn event loop) | bridge parses request, dispatch runs off-loop, respond |
 | engine forward pass | serialized by `_predict_lock` | torch CPU is single-worker; queue wait is measured and surfaced |
 | store writer | 1 | drains the write queue in batches of up to 200 rows or 250 ms |
 | retention timer | 1 | every 60 s: prune, roll up, checkpoint WAL |
@@ -104,13 +105,14 @@ Rules:
 ```mermaid
 sequenceDiagram
   participant C as Client
-  participant S as Server
+  participant A as App bridge (app.py)
   participant M as Middleware
   participant E as Engine
   participant R as Recorder
   participant W as Writer
-  C->>S: POST /predict (X-API-Key)
-  S->>M: dispatch
+  C->>A: POST /predict (X-API-Key)
+  A->>A: 411/413 Content-Length guards, X-Request-Id normalize
+  A->>M: dispatch (worker thread)
   M->>M: span http.receive (request id assigned)
   M->>M: span auth.verify
   M->>M: span body.parse (size, question count)
@@ -121,12 +123,21 @@ sequenceDiagram
   E->>R: span forward (the torch pass)
   E->>R: span serialize
   E-->>M: result
-  M->>M: span response.send
-  M->>R: close trace (status, totals, model, route_reason)
+  M->>M: span response.send (enters; closed by on_sent)
+  M-->>A: response + on_sent hook
+  A->>A: gzip large JSON when Accept-Encoding allows
+  A-->>C: 200 JSON (body written)
+  A->>M: on_sent hook fires (after body send)
+  M->>R: close response.send span, close trace (status, totals, model, route_reason)
   R->>W: enqueue trace + observations (+ scores)
   W->>W: batch insert, update rollups
-  M-->>C: 200 JSON
 ```
+
+Body framing (411/413), inbound `X-Request-Id` validation, gzip for large JSON, and the `on_sent`
+hook that fires after the body has been written all live in the FastAPI app bridge
+(`layawatch/app.py`); `http/server.py` only runs that app under uvicorn. With `close_on_sent=True`
+(the wiring in `__main__.py`) the `response.send` span and the trace close from the hook, so they
+bound the actual socket write; the middleware `finally` remains the crash-proof fallback.
 
 Timing is captured with `time.perf_counter()` deltas from a single trace start, so spans are
 comparable and total equals the sum of top-level spans plus framework overhead (stated explicitly in
@@ -366,7 +377,7 @@ runtime stage is `python:3.12-slim` plus torch CPU plus the `laya` package plus 
 
 | Layer | Tool | Scope |
 |---|---|---|
-| unit | pytest (stdlib only) | config validation, redaction, rollup math, password hashing, key hashing, span assembly |
+| unit | pytest (no engine, no server) | config validation, redaction, rollup math, password hashing, key hashing, span assembly |
 | integration | pytest with a temp state dir | full request through a fake engine adapter (no torch) into SQLite; retention and rollup jobs |
 | engine smoke | `scripts/smoke_laya.py` | real laya checkpoint, one routed request, records a real trace |
 | API contract | pytest | status codes, error envelope, filters, pagination, SSE framing |

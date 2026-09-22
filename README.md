@@ -9,8 +9,8 @@ surface with real user accounts.
 
 Design goals, in order:
 
-1. **Minimal footprint.** One Python process, zero added runtime dependencies (stdlib only), SQLite
-   on disk, no Node at runtime, no external services, no telemetry egress.
+1. **Minimal footprint.** One Python process, three small runtime dependencies (FastAPI,
+   uvicorn, httpx), SQLite on disk, no Node at runtime, no external services, no telemetry egress.
 2. **Full control.** Everything is local: state, credentials, retention, backups. One directory to
    back up, one command to run.
 3. **Real observability.** Trace-level detail (Langfuse-shaped model: traces, observations, scores)
@@ -28,7 +28,7 @@ Planning. Nothing here is implemented yet. The deliverable set is:
 ## Repository map (target)
 
 ```
-layawatch/        Python package, stdlib only: http, store, obs, auth, engine, api
+layawatch/        Python package: app (FastAPI app factory), http, store, obs, auth, engine, api
 web/              Next.js app, built to a static export and served by the Python process
 web/design/       approved mock + design references
 deploy/           Dockerfile, compose.yaml, caddy, systemd units
