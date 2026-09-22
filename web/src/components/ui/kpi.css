@@ -1,0 +1,104 @@
+/* KPI strip and cell. Contract: design-language section 4.10.
+ * Flat divided strip, mono label, tabular value with inline unit span,
+ * delta line naming the comparison. 4/2/1 columns at the breakpoints.
+ * No hover, no interaction. */
+
+.lw-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.lw-kpi {
+  padding: 14px 16px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+
+.lw-kpi:nth-child(4n + 1) {
+  border-left: 0;
+}
+
+.lw-kpi:nth-child(n + 5) {
+  border-top: 1px solid var(--line);
+}
+
+.lw-kpi-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+.lw-kpi-value {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lw-kpi-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-left: 2px;
+}
+
+.lw-kpi-delta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.lw-kpi-delta-ok {
+  color: var(--ok);
+}
+
+.lw-kpi-delta-warn {
+  color: var(--warn);
+}
+
+.lw-kpi-delta-err {
+  color: var(--err);
+}
+
+@media (max-width: 1080px) {
+  .lw-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lw-kpi:nth-child(4n + 1) {
+    border-left: 1px solid var(--line);
+  }
+
+  .lw-kpi:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .lw-kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 640px) {
+  .lw-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .lw-kpi {
+    border-left: 0;
+  }
+
+  .lw-kpi:nth-child(n + 2) {
+    border-top: 1px solid var(--line);
+  }
+}

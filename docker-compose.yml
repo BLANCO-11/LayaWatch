@@ -1,0 +1,70 @@
+# LayaWatch single-service compose (docs/operations.md section 2.2).
+#   build + start:  docker compose up -d --build
+#   logs:           docker compose logs -f layawatch
+#   health:         docker compose ps           # healthy ~30s after start
+# Every environment key below maps to a field in layawatch/config.py (the env authority;
+# see docs/architecture.md section 6). HF_HUB_CACHE is read by engine/adapter.py, not config.py.
+services:
+  layawatch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: layawatch:0.1.0
+    restart: unless-stopped
+    ports:
+      # Loopback-only alternative (plan phase-8 default): "127.0.0.1:8050:8050"
+      - "8050:8050"
+    environment:
+      # Container invariants (image defaults, repeated so operators edit one file).
+      LAYA_STATE_DIR: "/data"
+      LAYA_PORT: "8050"
+      LAYWATCH_BIND: "0.0.0.0"
+      # Engine surface (docs/operations.md section 4).
+      LAYA_MODELS: "english,multilingual"
+      LAYA_ENGLISH_ONLY: "0"
+      # Recorder, retention and stream defaults (config.py defaults unless saved in the UI).
+      LAYWATCH_TRACE_SAMPLE: "1.0"
+      LAYWATCH_CAPTURE_PAYLOADS: "0"
+      LAYWATCH_RETENTION_TRACES: "10000"
+      LAYWATCH_RETENTION_DAYS: "7"
+      LAYWATCH_RING_TRACES: "1000"
+      LAYWATCH_RING_LOGS: "2000"
+      LAYWATCH_WRITE_QUEUE_MAX: "5000"
+      LAYWATCH_STREAM_TICK: "3"
+      LAYWATCH_TRUST_PROXY: "0"
+      LAYWATCH_LOG_LEVEL: "info"
+      # Rate limits: LAYWATCH_RATELIMIT_* (docs/rate-limiting.md section 8).
+      # One-shot provisioning on an empty database; uncomment, then remove after first login:
+      # LAYWATCH_BOOTSTRAP_OWNER: "you@example.com:changeme"
+      # Checkpoint cache path consulted by engine/adapter.py:_hf_cache_root().
+      HF_HUB_CACHE: "/models"
+    volumes:
+      # state.sqlite3, secret.key, migrations -- owned by uid 10001.
+      - layawatch-data:/data
+      # HF checkpoint cache: survives the read-only root filesystem and image upgrades.
+      - layawatch-models:/models
+    read_only: true # only /data, /models and /tmp are writable
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      # Same stdlib probe as the Dockerfile HEALTHCHECK (no curl/wget in python:slim).
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request as u;
+          u.urlopen('http://127.0.0.1:%s/healthz'
+          % os.environ.get('LAYA_PORT', '8050'), timeout=4)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  layawatch-data:
+  layawatch-models:

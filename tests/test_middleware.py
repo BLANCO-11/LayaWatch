@@ -355,11 +355,15 @@ def test_thread_local_spans_delegate_inside_a_trace_and_noop_outside(tmp_path) -
     proxy.set(model="english")
     assert recorder.ring_traces() == []
 
-    # Inside a trace: spans and fields land in the active context (the adapter's view).
+    # Inside a trace: the middleware binds the context and spans land in it
+    # (the adapter's worker-thread view); unbinding restores the no-op state
+    # on threads with no active context.
     ctx = recorder.start(route="/predict", method="POST", request_id="0badc0de")
+    proxy.bind(ctx)
     with proxy.span("queue.wait", depth_at_acquire=1):
         pass
     proxy.set(queue_ms=1.5)
+    proxy.bind(None)
     ctx.finish(200)
 
     trace = recorder.ring_traces()[-1]

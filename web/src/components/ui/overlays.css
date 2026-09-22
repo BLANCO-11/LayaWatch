@@ -1,0 +1,467 @@
+/* Overlay and state styles: dropdown, dialog, drawer, toast, banner,
+ * tooltip anchor, empty/loading/error states, key-value list, secret reveal,
+ * copy field, avatar, audit row. Contract: sections 4.17-4.32. */
+
+.lw-pop {
+  position: absolute;
+  z-index: 50;
+  min-width: 200px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+}
+
+.lw-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lw-pop-item:hover,
+.lw-pop-item[data-focus="true"] {
+  background: var(--tint-hover);
+  color: var(--text);
+}
+
+.lw-pop-item-danger {
+  color: var(--err);
+}
+
+.lw-pop-item-danger:hover {
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+  color: var(--err);
+}
+
+.lw-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+[data-theme="light"] .lw-scrim {
+  background: rgba(40, 32, 20, 0.35);
+}
+
+.lw-dialog {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop);
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.lw-dialog-wide {
+  max-width: 640px;
+}
+
+.lw-dialog-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  padding: 16px 20px 0;
+}
+
+.lw-dialog-body {
+  padding: 12px 20px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.lw-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 16px;
+}
+
+.lw-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  width: 420px;
+  max-width: 100vw;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px) {
+  .lw-drawer {
+    width: 100%;
+  }
+}
+
+.lw-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.lw-toast {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-bar);
+  border-radius: var(--r-ctl);
+  box-shadow: var(--shadow-pop);
+  padding: 10px 12px;
+}
+
+.lw-toast-ok {
+  border-left-color: var(--ok);
+}
+
+.lw-toast-warn {
+  border-left-color: var(--warn);
+}
+
+.lw-toast-err {
+  border-left-color: var(--err);
+}
+
+.lw-toast-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lw-toast-body {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.lw-banner {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-bar);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.lw-banner-warn {
+  border-left-color: var(--warn);
+}
+
+.lw-banner-err {
+  border-left-color: var(--err);
+}
+
+.lw-empty {
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--text-3);
+}
+
+.lw-empty-icon {
+  width: 20px;
+  height: 20px;
+  margin: 0 auto 12px;
+  display: block;
+}
+
+.lw-empty-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.lw-empty-body {
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+
+.lw-error {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--err);
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.lw-error-title {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.lw-error-detail {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
+.lw-route-progress {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 40;
+  background: transparent;
+}
+
+.lw-route-progress[data-on="true"] {
+  background: var(--accent-bar);
+}
+
+/* Key-value list (4.27): mono key 160px, hairline rows, stacks under 640px. */
+.lw-dl {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  font-size: 13px;
+}
+
+.lw-dl > div {
+  display: contents;
+}
+
+.lw-dl dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.lw-dl dd {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-2);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lw-dl > div:last-child dt,
+.lw-dl > div:last-child dd {
+  border-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .lw-dl {
+    grid-template-columns: 1fr;
+  }
+
+  .lw-dl dt {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+}
+
+/* Secret reveal (4.28): dashed accent border, accent-tinted sunken well. */
+.lw-secret {
+  border: 1px dashed var(--accent-bar);
+  border-radius: var(--r-ctl);
+  background: color-mix(in srgb, var(--accent-bar) 8%, var(--bg));
+  box-shadow: var(--shadow-inset);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lw-secret code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  flex: 1;
+  min-width: 200px;
+  overflow-wrap: anywhere;
+}
+
+.lw-secret-note {
+  width: 100%;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.lw-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lw-copy-value {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* Avatar (4.30): 28px initials circle, accent ring while the menu is open. */
+.lw-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  flex: 0 0 auto;
+}
+
+.lw-avatar[data-open="true"] {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bar) 55%, transparent);
+}
+
+/* Timeline (4.17): 16px icon column, mono timestamp, text row. */
+.lw-timeline {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lw-timeline li {
+  display: grid;
+  grid-template-columns: 16px auto 1fr;
+  gap: 10px;
+  align-items: start;
+  font-size: 13px;
+}
+
+.lw-timeline-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+
+.lw-timeline-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* Audit row (4.31): mono timestamp, actor, verb, mono target, badge. */
+.lw-audit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.lw-audit:last-child {
+  border-bottom: 0;
+}
+
+.lw-audit-ts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.lw-audit-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lw-audit-verb {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.lw-audit-target {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-text);
+}
+
+/* Log viewer (4.16): sunken well, mono 12px, line-height 1.9. */
+.lw-log {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-inset);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.9;
+  padding: 12px 14px;
+  max-height: 480px;
+  overflow: auto;
+  white-space: pre;
+}
+
+.lw-log-line {
+  white-space: pre;
+}
+
+.lw-log-ts {
+  color: var(--text-3);
+}
+
+.lw-log-ok {
+  color: var(--ok);
+}
+
+.lw-log-wrn {
+  color: var(--warn);
+}
+
+.lw-log-err {
+  color: var(--err);
+}
+
+.lw-log-rid {
+  color: var(--accent-text);
+}
+
+.lw-log-empty {
+  color: var(--text-3);
+}
+
+.lw-log-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}

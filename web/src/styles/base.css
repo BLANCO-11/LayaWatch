@@ -1,0 +1,146 @@
+/*
+ * LayaWatch base styles. Contract: docs/design-language.md sections 1.2, 1.4.
+ * Type scale, focus ring, reduced-motion handling, tabular numerals.
+ * No color values here: every color resolves through web/src/styles/tokens.css.
+ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 400;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Section 1.2: tabular numerals everywhere numbers appear. */
+.mono,
+td.num,
+.lw-kpi-value,
+.lw-wf-ms,
+.lw-live,
+.lw-side-foot,
+.lw-log,
+.lw-chart-foot,
+.lw-range-label,
+.lw-copy-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Eyebrow labels: uppercase mono 10.5-11px, letter-spacing .09em-.1em. */
+.lw-eyebrow,
+.lw-sec-meta,
+.lw-card-title,
+.lw-field > span,
+.lw-nav-group {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* Section 7: visible 2px accent ring with 2px offset on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--accent-bar);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent-bar) 35%, transparent);
+}
+
+/* Section 4.25: the single shimmer keyframe. */
+@keyframes lw-shimmer {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+.lw-skeleton {
+  background: var(--line);
+  border-radius: var(--r-sm);
+  animation: lw-shimmer 1.4s ease infinite;
+}
+
+/* Section 4.23: tooltip bubble. Mono 11.5px, max 240px. */
+.lw-tip {
+  position: absolute;
+  z-index: 60;
+  max-width: 240px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  pointer-events: none;
+  white-space: normal;
+}
+
+/* Visually hidden: chart data-table alternatives, screen-reader captions. */
+.lw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

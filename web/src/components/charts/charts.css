@@ -1,0 +1,146 @@
+/* Chart primitives. Contract: design-language sections 4.14, 5 and 8.
+ * Hand-built SVG, no chart library. Gridlines at 25/50/75% only; series from
+ * --accent-bar/--s2/--s3; health series from --err/--warn; 14% flat area fill
+ * (never a gradient); gaps render as breaks; legend chips toggle series;
+ * crosshair mono tooltip; aria-label summary plus visually hidden data table. */
+
+.lw-chart-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 10px;
+}
+
+.lw-chart-svg {
+  width: 100%;
+  height: 170px;
+  display: block;
+}
+
+.lw-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.lw-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  font: inherit;
+}
+
+.lw-legend-chip:hover {
+  color: var(--text);
+}
+
+.lw-legend-chip[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
+.lw-legend-chip i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.lw-chart-tip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--text);
+}
+
+/* Waterfall (4.15): name 110px, start 64px right, track 1fr, duration 64px right. */
+.lw-wf {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lw-wf-row {
+  display: grid;
+  grid-template-columns: 110px 64px 1fr 64px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  border: 0;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.lw-wf-row:hover {
+  background: var(--tint-hover);
+}
+
+.lw-wf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lw-wf-ms {
+  text-align: right;
+  color: var(--text-3);
+}
+
+.lw-wf-track {
+  height: 18px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: var(--shadow-inset);
+  position: relative;
+  overflow: hidden;
+}
+
+.lw-wf-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--accent-bar);
+}
+
+.lw-wf-bar-q {
+  background: var(--warn);
+}
+
+.lw-wf-bar-fwd {
+  background: var(--s2);
+}
+
+.lw-wf-bar-err {
+  background: var(--err);
+}
+
+.lw-wf-detail {
+  grid-column: 1 / -1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

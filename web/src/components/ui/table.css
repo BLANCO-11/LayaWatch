@@ -1,0 +1,93 @@
+/* Table, pagination, filter bar. Contract: sections 4.11-4.13.
+ * Real table with sticky header at 56px, aria-sort on sortable columns,
+ * first-cell link as the focusable row entry, tint-hover wash,
+ * right-aligned tabular numerals. */
+
+.lw-tbl-wrap {
+  overflow-x: auto;
+}
+
+.lw-tbl-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.lw-tbl-wrap thead th {
+  position: sticky;
+  top: 56px;
+  background: var(--surface);
+  z-index: 5;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.lw-tbl-wrap tbody td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  vertical-align: middle;
+}
+
+.lw-tbl-wrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.lw-tbl-wrap tbody tr:hover {
+  background: var(--tint-hover);
+}
+
+.lw-tbl-wrap td.num,
+.lw-tbl-wrap th.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lw-tbl-wrap td.lw-id-cell {
+  font-family: var(--font-mono);
+  color: var(--accent-text);
+}
+
+.lw-tbl-wrap th .lw-sort-caret {
+  color: var(--text-3);
+  margin-left: 4px;
+}
+
+.lw-tbl-skel td {
+  padding: 11px 12px;
+}
+
+/* Pagination (4.12): Load older plus mono range label, no page numbers. */
+.lw-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.lw-range-label {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Filter bar (4.13): labelled sunken controls above a table or chart. */
+.lw-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.lw-filters .lw-field {
+  min-width: 140px;
+}

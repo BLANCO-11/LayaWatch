@@ -19,6 +19,17 @@ def _declared_tables() -> set[str]:
     return set(re.findall(r"CREATE\s+TABLE\s+(\w+)", text, flags=re.IGNORECASE))
 
 
+def _versions(directory: Path = MIGRATIONS_DIR) -> list[int]:
+    """Migration versions the directory offers, in apply order (nothing is pinned to
+    one file: later phases append migrations and this suite must track them)."""
+    versions: list[int] = []
+    for path in sorted(directory.glob("*.sql")):
+        match = re.match(r"\d+", path.stem)
+        assert match is not None
+        versions.append(int(match.group()))
+    return versions
+
+
 def _tables(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
@@ -28,9 +39,10 @@ def _tables(conn: sqlite3.Connection) -> set[str]:
 
 def test_fresh_migrate_creates_exactly_the_declared_tables(tmp_path: Path) -> None:
     conn = connect(tmp_path / "state.sqlite3")
+    versions = _versions()
     applied = migrate(conn)
-    assert applied == [1]
-    assert schema_version(conn) == 1
+    assert applied == versions
+    assert schema_version(conn) == versions[-1]
     declared = _declared_tables()
     actual = _tables(conn)
     assert actual - declared == set()  # no extra tables beyond schema.sql
@@ -40,13 +52,14 @@ def test_fresh_migrate_creates_exactly_the_declared_tables(tmp_path: Path) -> No
 
 def test_second_migrate_is_a_noop(tmp_path: Path) -> None:
     conn = connect(tmp_path / "state.sqlite3")
+    versions = _versions()
     first = migrate(conn)
-    assert first == [1]
+    assert first == versions
     rows_before = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
     assert migrate(conn) == []
     rows_after = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
     assert rows_after == rows_before
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == versions[-1]
     conn.close()
 
 
@@ -64,11 +77,12 @@ def test_version_guard_raises_before_applying_anything(tmp_path: Path) -> None:
     with pytest.raises(SchemaTooNewError) as excinfo:
         migrate(conn)
     message = str(excinfo.value)
+    newest = _versions()[-1]
     assert "999" in message
-    assert re.search(r"\b1\b", message)  # states the newest migration version too
+    assert re.search(rf"\b{newest}\b", message)  # states the newest migration version too
     assert "downgrade" in message.lower()
     assert "restore" in message.lower()
-    assert _tables(conn) == {"schema_migrations"}  # migration 0001 was never applied
+    assert _tables(conn) == {"schema_migrations"}  # no real migration was ever applied
     conn.close()
 
 
@@ -93,7 +107,8 @@ def test_recorded_rows_match_applied_files(tmp_path: Path) -> None:
 def test_failing_migration_rolls_back_its_transaction(tmp_path: Path) -> None:
     broken_dir = tmp_path / "migrations"
     shutil.copytree(MIGRATIONS_DIR, broken_dir)
-    (broken_dir / "0002_broken.sql").write_text(
+    versions = _versions()
+    (broken_dir / f"{versions[-1] + 1:04d}_broken.sql").write_text(
         "CREATE TABLE partial_table (id INTEGER PRIMARY KEY);\n"
         "INSERT INTO partial_table (id) VALUES (1);\n"
         "INSERT INTO missing_target VALUES (1);\n",
@@ -102,10 +117,10 @@ def test_failing_migration_rolls_back_its_transaction(tmp_path: Path) -> None:
     conn = connect(tmp_path / "state.sqlite3")
     with pytest.raises(sqlite3.Error):
         migrate(conn, broken_dir)
-    assert schema_version(conn) == 1  # 0001 committed, 0002 rolled back
+    assert schema_version(conn) == versions[-1]  # real files committed, broken one rolled back
     names = _tables(conn)
     assert "partial_table" not in names  # the failed file left no objects behind
     assert "traces" in names  # the first migration stayed applied
-    versions = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
-    assert [row[0] for row in versions] == [1]
+    recorded = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
+    assert [row[0] for row in recorded] == _versions()  # every real file, nothing extra
     conn.close()

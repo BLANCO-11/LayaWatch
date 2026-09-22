@@ -1,0 +1,43 @@
+/* Auth screens: centered card on the page canvas. */
+
+.lw-auth {
+  max-width: 420px;
+  margin: 48px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lw-auth-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  justify-content: center;
+}
+
+.lw-auth-brand .lw-brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+}
+
+.lw-auth-brand .lw-brand-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lw-auth-brand .lw-brand-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--gold);
+}
+
+.lw-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}

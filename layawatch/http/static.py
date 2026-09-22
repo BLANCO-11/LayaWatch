@@ -5,6 +5,10 @@ patterns win ties. ``resolve`` maps a request path onto a file under ``web_root`
 fallback pages when the export is missing) and is exported for tests. API-shaped paths never
 resolve to a file here: they raise ``HttpError(404, "not_found")`` so API clients always
 receive the JSON error envelope even when the static catch-all matched.
+
+The export pre-renders one exemplar id per dynamic route (``/traces/detail``): a deep link
+to any other ``/traces/<id>`` falls back to that exported page rather than 404, and the
+page reads the real id from the URL on the client.
 """
 from __future__ import annotations
 
@@ -43,6 +47,11 @@ _CONTENT_TYPES: dict[str, str] = {
     "txt": "text/plain; charset=utf-8",
     "webmanifest": "application/manifest+json; charset=utf-8",
 }
+
+#: Dynamic routes that pre-render one exemplar id for the static export, mapped to the
+#: exemplar path. A deep link to any other id (``/traces/<id>``) serves the exemplar page
+#: instead of 404; the client reads the real id from the URL. Single-segment tails only.
+_DEEP_LINK_FALLBACKS: tuple[tuple[str, str], ...] = (("/traces/", "/traces/detail"),)
 
 _NEXT_STATIC_PREFIX = "/_next/static/"
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
@@ -187,6 +196,14 @@ def resolve(path: str, web_root: Path) -> Response | None:
         response = _serve_file(candidate, decoded, root)
         if response is not None:
             return response
+    for prefix, exemplar in _DEEP_LINK_FALLBACKS:
+        tail = decoded[len(prefix) :] if decoded.startswith(prefix) else None
+        if not tail or "/" in tail:
+            continue
+        for candidate in _candidates(exemplar):
+            response = _serve_file(candidate, decoded, root)
+            if response is not None:
+                return response
     return None
 
 

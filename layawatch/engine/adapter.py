@@ -462,7 +462,14 @@ class RealAdapter:
                     questions=len(questions),
                     device=str(router.device or "auto"),
                 ):
-                    result = agent.system_one(state, questions)
+                    try:
+                        result = agent.system_one(state, questions)
+                    except KeyError as exc:
+                        # P1-I2: engine schema gaps (question missing "type") are
+                        # client errors: ValueError -> _guard answers 400, not 500.
+                        raise ValueError(
+                            f"question payload missing a required field: {exc}"
+                        ) from exc
                 self._spans.set(forward_ms=(time.perf_counter() - started) * 1000.0)
                 with self._spans.span("serialize", answers=len(result["answers"])):
                     return {

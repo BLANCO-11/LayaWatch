@@ -1,0 +1,122 @@
+/* Buttons. Contract: design-language sections 4.1-4.2.
+ * Variants primary/secondary/ghost/danger; sizes sm 28px, md 34px.
+ * Loading swaps the label to Working with locked width and aria-busy. */
+
+.lw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--r-ctl);
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--t),
+    background var(--t),
+    border-color var(--t),
+    box-shadow var(--t);
+}
+
+.lw-btn-sm {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+.lw-btn-primary {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-card);
+}
+
+.lw-btn-primary:hover {
+  background: var(--accent-fill-hover);
+  box-shadow: var(--shadow-lift);
+}
+
+.lw-btn-secondary {
+  background: var(--raised);
+  border-color: var(--line);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+.lw-btn-secondary:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+.lw-btn-ghost {
+  background: transparent;
+  color: var(--text-2);
+}
+
+.lw-btn-ghost:hover {
+  background: var(--tint-hover);
+  color: var(--text);
+}
+
+.lw-btn-danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--err) 40%, transparent);
+  color: var(--err);
+}
+
+.lw-btn-danger:hover {
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+}
+
+.lw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lw-btn:disabled:hover {
+  box-shadow: var(--shadow-card);
+  background: var(--accent-fill);
+}
+
+.lw-btn-secondary:disabled:hover,
+.lw-btn-ghost:disabled:hover,
+.lw-btn-danger:disabled:hover {
+  background: var(--raised);
+}
+
+.lw-btn-loading-dots {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.lw-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition:
+    color var(--t),
+    border-color var(--t),
+    box-shadow var(--t);
+}
+
+.lw-icon-btn:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+.lw-icon-btn svg {
+  width: 16px;
+  height: 16px;
+}

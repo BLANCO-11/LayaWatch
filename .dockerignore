@@ -1,0 +1,29 @@
+# VCS
+.git
+
+# Python environments and caches
+.venv
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+
+# Node dependencies and host-built artifacts (stage 1 rebuilds web/out from source)
+node_modules
+**/node_modules
+web/out
+web/.next
+
+# Engine and browser caches, heavy host-side dirs (keep the build context small)
+.hf-cache
+.chrome-libs
+archive
+pkgs
+hub
+xet
+root
+
+# Host state and secrets must never enter the build context
+state.sqlite3*
+secret.key
+api_keys.json*

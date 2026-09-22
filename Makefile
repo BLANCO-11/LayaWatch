@@ -2,7 +2,7 @@ VENV ?= .venv
 PY = $(VENV)/bin/python
 UV ?= $(HOME)/.local/bin/uv
 
-.PHONY: all bootstrap dev migrate test lint web-build smoke
+.PHONY: all bootstrap dev migrate test test-ui web-check lint web-build smoke
 
 all: lint test
 
@@ -25,6 +25,12 @@ lint:
 web-build:
 	@test -f web/package.json || { echo "web/ lands in Phase 4"; exit 0; }
 	cd web && npm ci && npm run build
+
+test-ui:
+	$(PY) -m pytest -q -m ui tests/ui
+
+web-check:
+	$(PY) scripts/web_check.py catalog bundle a11y
 
 # Needs the engine deps (laya, torch) installed.
 smoke:

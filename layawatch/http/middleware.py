@@ -26,11 +26,13 @@ active on the calling thread, and are no-ops outside a trace.
 from __future__ import annotations
 
 import json
+import threading
 import traceback
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Callable
 
+from layawatch.auth.sessions import enforce_browser_session
 from layawatch.engine.keys import auth_armed, load_pepper, verify_key
 from layawatch.http.router import Router
 from layawatch.http.types import HttpError, Request, Response, error_response
@@ -58,33 +60,44 @@ class _NullSpan:
 
 _NULL_SPAN = _NullSpan()
 
-
 class ThreadLocalSpans:
     """Recorder proxy handed to the engine adapter: spans join the active request trace.
 
-    Delegates ``span``/``event``/``set`` to whichever ``Context`` the recorder bound to the
-    calling thread; outside a recorded context every call is a no-op (``span`` returns a
-    null context manager), so adapter work on a helper thread or before the first request
-    records nothing instead of raising. The surface mirrors the adapter's ``spans`` seam
-    (``engine/adapter.py``: span + set + event).
+    The middleware binds each request's ``Context`` into the proxy at dispatch time and
+    clears it when the request finishes; the bound context travels with the proxy object
+    itself, so a blocking engine call on another worker thread (``asyncio.to_thread``, a
+    pool) still records into the right trace. Before the first request - and after a
+    request finishes - every call is a no-op (``span`` returns a null context manager).
+    The surface mirrors the adapter's ``spans`` seam (``engine/adapter.py``: span + set
+    + event).
     """
 
     def __init__(self, recorder: Recorder) -> None:
         self.recorder = recorder
+        self._local = threading.local()
+
+    def bind(self, ctx: Context | None) -> None:
+        """Attach the current request's context to this proxy (None clears it)."""
+        self._local.ctx = ctx
 
     def span(self, name: str, input: Any = None, output: Any = None, **attrs: Any) -> Any:
-        ctx = current_context()
+        ctx = getattr(self._local, "ctx", None)
+        if ctx is None:
+            ctx = current_context()
         return _NULL_SPAN if ctx is None else ctx.span(name, input, output, **attrs)
 
     def event(self, name: str, input: Any = None, output: Any = None, **attrs: Any) -> Any:
-        ctx = current_context()
+        ctx = getattr(self._local, "ctx", None)
+        if ctx is None:
+            ctx = current_context()
         return None if ctx is None else ctx.event(name, input, output, **attrs)
 
     def set(self, **fields: Any) -> None:
-        ctx = current_context()
+        ctx = getattr(self._local, "ctx", None)
+        if ctx is None:
+            ctx = current_context()
         if ctx is not None:
             ctx.set(**fields)
-
 
 def instrument(
     router: Router,
@@ -93,18 +106,29 @@ def instrument(
     *,
     engine_paths: tuple[str, ...] = ("/predict", "/route"),
     close_on_sent: bool = False,
+    spans: ThreadLocalSpans | None = None,
 ) -> Callable[[Request], Response]:
     """Return a dispatch callable with the engine request lifecycle (architecture.md 4).
 
     ``close_on_sent=True`` defers trace closure to the response's ``on_sent`` hook, which the
     server's write path calls after writing the body; otherwise the ``finally`` closes the
-    trace on return. Either way the trace finishes exactly once.
+    trace on return. Either way the trace finishes exactly once. ``spans`` (the proxy
+    injected into the engine adapter) is bound to each request's context so adapter spans
+    land in the right trace even when the engine runs on another thread.
     """
     engine = frozenset(engine_paths)
 
     def handle(request: Request) -> Response:
         if request.path not in engine:
-            return router.dispatch(request)  # passthrough: no trace, no spans, no SQLite
+            # Browser-session enforcement for /api/v1 (api-reference 1, security 3.2):
+            # no lw_session cookie -> unchanged passthrough; with one -> 401 on a dead
+            # session, 403 on a must_change user, 403 without the CSRF echo on mutations.
+            # Gate failures render the same envelope the router would produce.
+            try:
+                enforce_browser_session(request, db_path)
+            except HttpError as exc:
+                return error_response(exc, request.request_id)
+            return router.dispatch(request)  # passthrough: no trace, no spans
 
         ctx = recorder.start(
             route=request.path,
@@ -115,6 +139,8 @@ def instrument(
         response: Response | None = None
         status = 500
         attached = False
+        if spans is not None:
+            spans.bind(ctx)
         phase = "http.receive"
         try:
             try:
@@ -153,10 +179,12 @@ def instrument(
                 ctx.set(error_code=INTERNAL_CODE, error_message=str(exc))
             status = response.status
             if close_on_sent:
-                _attach_send_hook(ctx, response)
+                _attach_send_hook(ctx, response, spans)
                 attached = True
             return response
         finally:
+            if spans is not None:
+                spans.bind(None)
             if not attached:
                 # Default mode, and the crash-proof fallback for close_on_sent: emit the
                 # send span and finish here, so no handler crash can lose the trace.
@@ -167,11 +195,12 @@ def instrument(
                 ):
                     pass
                 ctx.finish(status)
-
     return handle
 
 
-def _attach_send_hook(ctx: Context, response: Response) -> None:
+def _attach_send_hook(
+    ctx: Context, response: Response, spans: ThreadLocalSpans | None = None
+) -> None:
     """Enter ``response.send`` now; the server's write path invokes ``response.on_sent``.
 
     The span closes when the hook runs - after the header and body have been written - so
@@ -187,6 +216,8 @@ def _attach_send_hook(ctx: Context, response: Response) -> None:
     def sent() -> None:
         stack.close()
         ctx.finish(response.status)
+        if spans is not None:
+            spans.bind(None)
 
     response.on_sent = sent
 

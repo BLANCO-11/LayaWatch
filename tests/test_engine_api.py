@@ -81,9 +81,10 @@ def build(tmp_path, *, english_only=False, is_english=True, block=False):
     conn.close()
     recorder = Recorder()
     agent = _StubAgent(block=block)
+    spans = ThreadLocalSpans(recorder)
     adapter = RealAdapter(
         engine=_StubEngine(agent, is_english),
-        spans=ThreadLocalSpans(recorder),
+        spans=spans,
         device="cpu",
         models=("english", "multilingual"),
         english_only=english_only,
@@ -91,7 +92,7 @@ def build(tmp_path, *, english_only=False, is_english=True, block=False):
     )
     router = Router()
     add_engine_routes(router, adapter)
-    handle = instrument(router, recorder, db_path)
+    handle = instrument(router, recorder, db_path, spans=spans)
     return handle, recorder, router, adapter, agent
 
 

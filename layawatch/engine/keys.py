@@ -89,28 +89,42 @@ def verify_key(
 ) -> str | None:
     """Return the key id whose stored digest matches ``presented``; None if nothing matches.
 
-    Candidates come from an index lookup on the 8-char prefix (rows sharing a prefix are all
-    checked; revoked rows never are). Each candidate is compared in constant time against BOTH
-    stored formats -- the peppered HMAC for new keys and the plain SHA-256 carried over from the
-    legacy file -- so pre-import plaintexts keep verifying, with no short-circuit between the two
-    checks. On a match the row's ``last_used``/``request_count`` move in the same short
-    transaction as the read (see the module docstring for the security.md 3.3 deviation).
+    Candidates come from an index lookup on the 8-char prefix -- of either the current row
+    value or the rotation-grace ``prev_prefix`` (rows sharing a prefix are all checked;
+    revoked rows never are). Each candidate is compared in constant time against BOTH
+    stored formats -- the peppered HMAC for new keys and the plain SHA-256 carried over from
+    the legacy file -- so pre-import plaintexts keep verifying, with no short-circuit between
+    the two checks. A rotated key's previous digest (``prev_hash``) joins the comparison
+    while ``prev_expires_at`` is in the future, which is the 5-minute rotation grace of
+    security.md 3.3; after the deadline it is ignored without being cleared. On a match the
+    row's ``last_used``/``request_count`` move in the same short transaction as the read
+    (see the module docstring for the security.md 3.3 deviation).
     """
     secret = str(presented)
     if not secret:
         return None
     peppered = hash_secret(secret, pepper)
     legacy = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    prefix = prefix_of(secret)
     with conn:
         rows = conn.execute(
-            "SELECT id, hash FROM api_keys WHERE prefix = ? AND revoked_at IS NULL",
-            (prefix_of(secret),),
+            "SELECT id, hash, prev_hash, prev_expires_at FROM api_keys"
+            " WHERE (prefix = ? OR prev_prefix = ?) AND revoked_at IS NULL",
+            (prefix, prefix),
         ).fetchall()
+        now = time.time()
         for row in rows:
             stored = row[1]
             matched = hmac.compare_digest(stored, peppered) | hmac.compare_digest(
                 stored, legacy
             )
+            # Rotation grace: the previous digest stays valid until prev_expires_at
+            # (5 minutes, security.md 3.3); the prefix lookup above matches either slot.
+            prev_hash, prev_expires_at = row[2], row[3]
+            if prev_hash and prev_expires_at is not None and prev_expires_at > now:
+                matched = matched | hmac.compare_digest(
+                    prev_hash, peppered
+                ) | hmac.compare_digest(prev_hash, legacy)
             if matched:
                 conn.execute(
                     "UPDATE api_keys SET last_used = ?, request_count = request_count + 1"

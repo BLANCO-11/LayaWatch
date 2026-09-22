@@ -3,10 +3,15 @@
 Handlers receive a :class:`Request` and return a :class:`Response`. Raising :class:`HttpError`
 inside a handler renders the JSON error envelope from ``docs/api-reference.md`` section 2:
 ``{"error": {"code", "message", "details"?}}``. The router adds ``X-Request-Id`` to every response.
+
+A :class:`Response` with :attr:`Response.stream` set is a streaming response (SSE): the server
+sends ``Connection: close`` without a ``Content-Length``, clears the socket timeout and hands the
+raw writer to the callable, which writes bytes until it returns or the client disconnects.
 """
 from __future__ import annotations
 
 import json as _json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -86,6 +91,8 @@ class Response:
     status: int = 200
     headers: dict[str, str] = field(default_factory=dict)
     body: bytes = b""
+    #: Streaming body (SSE): called with the raw buffered writer after headers are sent.
+    stream: Callable[[Any], None] | None = None
 
 
 def json_response(
