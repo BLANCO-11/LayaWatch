@@ -125,8 +125,11 @@ export const api = {
     apiFetch<T>(path, { ...opts, method: "POST", body }),
   patch: <T>(path: string, body?: unknown, opts?: Omit<RequestOptions, "method" | "body">) =>
     apiFetch<T>(path, { ...opts, method: "PATCH", body }),
-  del: <T>(path: string, opts?: Omit<RequestOptions, "method" | "body">) =>
-    apiFetch<T>(path, { ...opts, method: "DELETE" }),
+  /* The server answers 411 length_required to any body-less request in
+   * _BODY_REQUIRED (POST/PUT/PATCH/DELETE), and fetch does not attach
+   * Content-Length to an empty DELETE - so default to a JSON "{}" body. */
+  del: <T>(path: string, opts?: Omit<RequestOptions, "method">) =>
+    apiFetch<T>(path, { ...opts, method: "DELETE", body: opts?.body ?? {} }),
 };
 
 /* ---------- API shapes (docs/api-reference.md sections 3-13) ---------- */
@@ -286,11 +289,13 @@ export interface StreamPulse {
   queue_depth: number;
 }
 
+export type Role = "owner" | "admin" | "viewer";
+
 export interface MeResponse {
   id: string;
   email: string;
   name?: string;
-  role: "owner" | "admin" | "viewer";
+  role: Role;
   permissions?: string[];
 }
 
@@ -334,14 +339,79 @@ export interface MetaResponse {
 }
 
 
+/* GET /api/v1/keys item (api-reference section 9). Epoch seconds; the
+ * per-key override is null when the global default applies (section 9.1). */
 export interface ApiKeyItem {
   id: string;
   name: string;
   prefix: string;
-  created: string;
-  last_used?: string | null;
+  created: number;
+  last_used: number | null;
   request_count: number;
   revoked: boolean;
+  rate_limit_per_min: number | null;
+  burst: number | null;
+}
+
+/* POST /api/v1/keys and POST /api/v1/keys/{id}/rotate: the plaintext is
+ * returned exactly once and never stored or logged (security.md 3.3). */
+export interface KeySecret {
+  id: string;
+  name?: string;
+  key: string;
+  prefix: string;
+  rate_limit_per_min?: number | null;
+  burst?: number | null;
+  note?: string;
+  grace?: number;
+}
+
+/* GET/POST /api/v1/keys/auth. */
+export interface KeyAuthState {
+  enabled: boolean;
+}
+
+/* GET /api/v1/users item (user_payload in auth/users.py). */
+export interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  created_at: number;
+  last_login_at: number | null;
+  disabled: boolean;
+  must_change: boolean;
+}
+
+/* GET /api/v1/users/{id}/sessions item (api-reference section 10). */
+export interface UserSession {
+  id: string;
+  created_at: number;
+  expires_at: number;
+  last_seen: number | null;
+  user_agent: string | null;
+  ip: string | null;
+}
+
+/* GET /api/v1/audit item (api-reference section 13). Fields are optional so
+ * the view tolerates rows it does not know yet; extra fields are ignored. */
+export interface AuditEntry {
+  ts?: number;
+  actor?: string | null;
+  actor_id?: string | null;
+  action?: string;
+  target?: string | null;
+  result?: string;
+  meta?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+/* GET /api/v1/audit envelope: same paging contract as the other lists, but
+ * every field is treated as optional until the endpoint lands. */
+export interface AuditEnvelope {
+  items?: AuditEntry[] | null;
+  next_cursor?: string | null;
+  total_estimate?: number | null;
 }
 
 export interface ModelInfo {
@@ -350,4 +420,69 @@ export interface ModelInfo {
   default: string[];
   device: string;
   rss_mb: number;
+  /* D-014 stats block: one entry per available/loaded name; nulls are real
+   * until a model.load span or a metric_rollup bucket exists. */
+  stats?: Record<string, ModelStat>;
+}
+
+/* GET /api/v1/models stats entry (D-014). */
+export interface ModelStat {
+  size_bytes: number | null;
+  load_ms: number | null;
+  requests_24h: number;
+  p50_ms: number | null;
+}
+
+/* GET/POST /api/v1/settings. `settings` is the raw string rows, `effective`
+ * the typed view the cards edit (P6Api wave contract). */
+export interface SettingsEffective {
+  retention_traces: number;
+  retention_days: number;
+  log_ring_size: number;
+  trace_sample: number;
+  stream_tick: number;
+  capture_payloads: boolean;
+}
+
+export interface SettingsResponse {
+  config: MetaConfig;
+  settings: Record<string, string>;
+  effective?: SettingsEffective;
+  note: string;
+}
+
+/* GET /api/v1/ratelimits (rate-limiting.md 7). */
+export interface RatelimitPolicy {
+  enabled: boolean;
+  engine_per_min: number;
+  ip_per_min: number;
+  login: number;
+  login_window: number;
+  mutation_per_min: number;
+  playground_per_min: number;
+  engine_max_inflight: number;
+  engine_queue_max: number;
+  loopback_exempt: boolean;
+  keys?: Array<{
+    id: string;
+    prefix: string;
+    rate_limit_per_min: number | null;
+    burst: number | null;
+  }>;
+}
+
+/* GET /api/v1/ratelimits/usage item, sorted by usage ratio by the server. */
+export interface RatelimitUsageItem {
+  subject: string;
+  scope: string;
+  used: number;
+  limit: number;
+  resets_in: number;
+}
+
+/* DELETE /api/v1/traces?since=&until= response (D-013). */
+export interface TraceDeleteResult {
+  deleted: number;
+  since: number | null;
+  until: number | null;
 }

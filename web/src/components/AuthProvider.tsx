@@ -1,10 +1,12 @@
 /* Auth guard: redirects to /login on 401, returns to the original path
  * after sign-in. Contract: plan task 6, api-reference section 10.
  * Static-export safe: the guard is client-side (R-05); the server 401s
- * every API call regardless of route. */
+ * every API call regardless of route.
+ * Phase 6: one fetch per navigation shared through context, so views and the
+ * sidebar gate from a single /auth/me payload (useAuth reads it). */
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { api, ApiError, type MeResponse } from "@/lib/api";
 
@@ -13,29 +15,31 @@ export interface AuthState {
   loading: boolean;
 }
 
+const AuthContext = createContext<AuthState>({ me: null, loading: true });
+
 export function useAuth(): AuthState {
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  return useContext(AuthContext);
+}
+
+export default function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AuthState>({ me: null, loading: true });
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
     if (pathname === "/login" || pathname === "/setup") {
-      setLoading(false);
+      setState({ me: null, loading: false });
       return;
     }
     api
       .get<MeResponse>("/api/v1/auth/me")
       .then((mine) => {
-        if (!cancelled) {
-          setMe(mine);
-          setLoading(false);
-        }
+        if (!cancelled) setState({ me: mine, loading: false });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setLoading(false);
+        setState({ me: null, loading: false });
         if (err instanceof ApiError && err.status === 401) {
           router.replace(`/login?next=${encodeURIComponent(pathname)}`);
         }
@@ -45,12 +49,7 @@ export function useAuth(): AuthState {
     };
   }, [pathname, router]);
 
-  return { me, loading };
-}
-
-export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { loading } = useAuth();
-  if (loading) {
+  if (state.loading) {
     return (
       <div className="lw-app">
         <main className="lw-content" aria-busy="true" aria-label="Checking session">
@@ -60,5 +59,5 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       </div>
     );
   }
-  return <>{children}</>;
+  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
 }

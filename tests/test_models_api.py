@@ -94,10 +94,16 @@ def test_list_shape_matches_section_11(tmp_path) -> None:
 
     assert response.status == 200
     payload = json.loads(response.body)
-    assert set(payload) == {"loaded", "available", "default", "device", "rss_mb"}
+    assert set(payload) == {"loaded", "available", "default", "device", "rss_mb", "stats"}
     assert payload["loaded"] == ["english"]
     assert payload["available"] == ["english", "multilingual"]
     assert payload["default"] == ["english", "multilingual"]
+    # D-014: every catalog entry carries the four stat columns; the fake adapter emits no
+    # model.load span and a fresh database has no rollup rows, so the nulls are the contract.
+    assert payload["stats"] == {
+        "english": {"size_bytes": None, "load_ms": None, "requests_24h": 0, "p50_ms": None},
+        "multilingual": {"size_bytes": None, "load_ms": None, "requests_24h": 0, "p50_ms": None},
+    }
     assert payload["device"] == "fake"
     assert isinstance(payload["rss_mb"], (int, float))
     assert payload["rss_mb"] >= 0
@@ -202,7 +208,9 @@ def test_unload_is_idempotent_and_publishes(tmp_path) -> None:
 def test_bad_action_and_models_are_400_invalid_request(tmp_path) -> None:
     router, _adapter, _db_path = build(tmp_path)
 
-    bad_action = call(router, "POST", "/api/v1/models", {"action": "explode", "models": ["english"]})
+    bad_action = call(
+        router, "POST", "/api/v1/models", {"action": "explode", "models": ["english"]}
+    )
     assert bad_action.status == 400
     assert error_of(bad_action)["details"] == {"field": "action"}
 

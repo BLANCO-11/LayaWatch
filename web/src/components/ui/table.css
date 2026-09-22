@@ -1,7 +1,11 @@
 /* Table, pagination, filter bar. Contract: sections 4.11-4.13.
- * Real table with sticky header at 56px, aria-sort on sortable columns,
- * first-cell link as the focusable row entry, tint-hover wash,
- * right-aligned tabular numerals. */
+ * Real table with a header that stays pinned to the wrapper top, aria-sort
+ * on sortable columns, first-cell link as the focusable row entry, tint-hover
+ * wash, right-aligned tabular numerals.
+ * Note: .lw-tbl-wrap is a scroll container (overflow-x forces both axes), so
+ * it - not the window - is the sticky scrollport for th. `top: 0` keeps the
+ * header in its natural flow position; any larger inset would push it down
+ * over the first row at rest. */
 
 .lw-tbl-wrap {
   overflow-x: auto;
@@ -15,7 +19,7 @@
 
 .lw-tbl-wrap thead th {
   position: sticky;
-  top: 56px;
+  top: 0;
   background: var(--surface);
   z-index: 5;
   font-family: var(--font-mono);

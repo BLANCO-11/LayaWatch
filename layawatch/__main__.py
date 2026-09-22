@@ -1,4 +1,4 @@
-"""LayaWatch entrypoint: ``python -m layawatch`` (``--migrate-only`` applies migrations and exits)."""
+"""LayaWatch entrypoint: ``python -m layawatch``; ``--migrate-only`` migrates and exits."""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 
+from layawatch.api.audit import add_audit_routes
 from layawatch.api.auth import add_auth_routes
 from layawatch.api.engine import add_engine_routes
 from layawatch.api.health import add_health_routes, add_meta_routes, add_root_route
@@ -14,9 +15,11 @@ from layawatch.api.legacy import add_legacy_routes, deprecation_counts
 from layawatch.api.logs import add_logs_routes
 from layawatch.api.metrics import add_metrics_routes
 from layawatch.api.models import add_model_routes
+from layawatch.api.playground import add_playground_routes
+from layawatch.api.ratelimits import add_ratelimit_routes
 from layawatch.api.settings import add_settings_routes
 from layawatch.api.stream import hub
-from layawatch.api.traces import add_trace_routes
+from layawatch.api.traces import add_range_delete_route, add_trace_routes
 from layawatch.app import create_app
 from layawatch.config import Config, ConfigError
 from layawatch.engine.adapter import FakeAdapter, RealAdapter
@@ -200,9 +203,13 @@ def main(argv: list[str] | None = None) -> int:
         deprecations=deprecation_counts,
     )
     add_trace_routes(router, cfg.db_path)
+    add_range_delete_route(router, cfg.db_path, config=cfg)
     add_metrics_routes(router, cfg.db_path)
     add_logs_routes(router, cfg.db_path)
     add_settings_routes(router, cfg, cfg.db_path)
+    add_ratelimit_routes(router, config=cfg, db_path=cfg.db_path)
+    add_audit_routes(router, config=cfg, db_path=cfg.db_path)
+    add_playground_routes(router, adapter, config=cfg, db_path=cfg.db_path, recorder=recorder)
     add_auth_routes(router, config=cfg, db_path=cfg.db_path)
     add_model_routes(router, adapter, cfg, cfg.db_path, on_change=hub.publish_model)
     add_engine_routes(router, adapter)

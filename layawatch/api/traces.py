@@ -1,11 +1,15 @@
-"""Trace endpoints: list, detail, observations, scores, tags and delete (api-reference 5).
+"""Trace endpoints: list, detail, observations, scores, tags and delete (api-reference 5),
+plus the phase-6 D-013 danger-zone range delete.
 
 Handlers follow the middleware ``_verify_auth`` connection pattern: a short-lived SQLite
 connection per request, closed in ``finally``. Allowlisted filters, keyset pagination,
 waterfall ordering and the summary math live in ``store.queries``; this module maps HTTP
 onto those calls and renders the shared error envelope. Authentication and role gating
 arrive in Phase 3 (plan/phase-2-read-api), so these handlers accept credential-less
-requests today.
+requests today. The one exception is ``add_range_delete_route`` (plan phase-6 D-013):
+bulk deletion is admin+ through the shared ``traces.delete`` permission and audited with
+its range and count; it registers from its own ``add_*`` line because it needs the
+``Config`` the six-phase-5 endpoints never take.
 """
 from __future__ import annotations
 
@@ -15,13 +19,19 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from layawatch.auth.audit import audit
+from layawatch.auth.sessions import gate
 from layawatch.http.types import HttpError, Request, Response, empty_response, json_response
 from layawatch.obs.recorder import Score
 from layawatch.store import queries
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
+    from layawatch.config import Config
     from layawatch.http.router import Router
+
+#: Time-window parameters the D-013 range delete accepts (section 2 shorthand included).
+_RANGE_PARAMS = frozenset({"since", "until", "range"})
 
 _PREFIX = "/api/v1/traces/"
 #: Observation types the waterfall endpoint returns: span and generation rows. ``event``
@@ -185,6 +195,68 @@ def add_trace_routes(router: Router, db_path: str | Path) -> None:
     router.add("GET", "/api/v1/traces/*", get_route)
     router.add("POST", "/api/v1/traces/*", post_route)
     router.add("DELETE", "/api/v1/traces/*", delete_route)
+
+
+def add_range_delete_route(router: Router, db_path: str | Path, *, config: Config) -> None:
+    """Register ``DELETE /api/v1/traces?since=&until=`` (plan phase-6 D-013).
+
+    Danger-zone bulk delete: at least one time bound is required (an unbounded delete is
+    a 400, never an accident), ``since`` inclusive and ``until`` exclusive exactly like
+    the list window, admin+ through ``traces.delete`` (security.md 2), and one bounded
+    transaction whose audit row (``trace.deleted``, same-transaction) carries the range
+    and the deleted count. Deletion semantics stay those of ``queries.delete_trace`` and
+    the retention prune: a set-based ``DELETE FROM traces`` cascades observations and
+    scores through the foreign keys and keeps ``log_entry`` rows (no foreign key), and
+    the metric rollups - independent rows the retention pass only prunes past
+    ``rollup_days`` - survive so metrics history outlives the raw traces.
+    """
+
+    def delete_range(request: Request) -> Response:
+        for key in request.query:
+            if key not in _RANGE_PARAMS:
+                raise HttpError(400, "invalid_filter", f"unknown query parameter {key!r}")
+        try:
+            since, until = queries.resolve_window(request.query)
+        except queries.InvalidFilter as exc:
+            raise HttpError(400, "invalid_filter", str(exc)) from None
+        if since is None and until is None:
+            raise HttpError(
+                400, "invalid_filter", "a time range is required: pass since, until or range"
+            )
+        if since is not None and until is not None and since >= until:
+            raise HttpError(400, "invalid_filter", "since must be before until")
+
+        clauses: list[str] = []
+        args: list[Any] = []
+        if since is not None:
+            clauses.append("ts_start >= ?")
+            args.append(since)
+        if until is not None:
+            clauses.append("ts_start < ?")
+            args.append(until)
+        where_sql = " AND ".join(clauses)
+
+        conn = connect(db_path)
+        try:
+            principal = gate(
+                request, conn, config, db_path, "traces.delete", action="trace.deleted"
+            )
+            deleted = conn.execute(
+                f"DELETE FROM traces WHERE {where_sql}", args
+            ).rowcount
+            audit(
+                conn,
+                principal.actor,
+                "trace.deleted",
+                actor_id=principal.actor_id,
+                meta={"since": since, "until": until, "count": deleted},
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return json_response({"deleted": deleted, "since": since, "until": until})
+
+    router.add("DELETE", "/api/v1/traces", delete_range)
 
 
 def _unknown(trace_id: str) -> HttpError:

@@ -31,7 +31,7 @@ from layawatch.log import get_logger
 _logger = get_logger("http")
 
 _REQUEST_ID_RE = re.compile(r"^[0-9a-f]{8}$")
-_BODY_REQUIRED = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_BODY_REQUIRED = frozenset({"POST", "PUT", "PATCH"})  # DELETE needs no body (RFC 9110)
 _GZIP_MIN = 1024
 _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 _EOF: Any = object()

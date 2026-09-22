@@ -6,12 +6,15 @@ import { usePathname } from "next/navigation";
 import { activeEntry } from "./nav";
 import LivePill from "./LivePill";
 import ThemeToggle from "./ThemeToggle";
+import { UserMenu } from "@/components/ui/Avatar";
+import { useAuth } from "@/components/AuthProvider";
 import type { StreamStatus } from "@/lib/stream";
 import "./shell.css";
 
 export default function Topbar({ streamStatus }: { streamStatus: StreamStatus }) {
   const pathname = usePathname();
   const entry = activeEntry(pathname);
+  const { me } = useAuth();
   return (
     <header className="lw-topbar">
       <div className="lw-tb-left">
@@ -21,6 +24,7 @@ export default function Topbar({ streamStatus }: { streamStatus: StreamStatus })
       <div className="lw-tb-right">
         <LivePill status={streamStatus} tickS={3} />
         <ThemeToggle />
+        {me ? <UserMenu me={me} /> : null}
       </div>
     </header>
   );

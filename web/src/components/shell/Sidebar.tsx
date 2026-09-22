@@ -6,10 +6,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "./nav";
+import { useAuth } from "@/components/AuthProvider";
+import { can } from "@/lib/permissions";
 import "./shell.css";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { me } = useAuth();
   return (
     <aside className="lw-side">
       <div className="lw-brand">
@@ -21,23 +24,25 @@ export default function Sidebar() {
         {NAV_GROUPS.map((group) => (
           <div key={group.name}>
             <div className="lw-nav-group">{group.name}</div>
-            {group.entries.map((entry) => {
-              const isActive =
-                entry.href === "/"
-                  ? pathname === "/"
-                  : pathname === entry.href || pathname.startsWith(`${entry.href}/`);
-              return (
-                <Link
-                  key={entry.href}
-                  href={entry.href}
-                  className={`lw-nav-item${isActive ? " lw-active" : ""}`}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  <span className="lw-nav-dot" aria-hidden="true" />
-                  {entry.label}
-                </Link>
-              );
-            })}
+            {group.entries
+              .filter((entry) => entry.href !== "/users" || can(me, "users.read"))
+              .map((entry) => {
+                const isActive =
+                  entry.href === "/"
+                    ? pathname === "/"
+                    : pathname === entry.href || pathname.startsWith(`${entry.href}/`);
+                return (
+                  <Link
+                    key={entry.href}
+                    href={entry.href}
+                    className={`lw-nav-item${isActive ? " lw-active" : ""}`}
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <span className="lw-nav-dot" aria-hidden="true" />
+                    {entry.label}
+                  </Link>
+                );
+              })}
           </div>
         ))}
       </nav>
