@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import sys
 import threading
 import time
@@ -97,6 +98,22 @@ def _pulse_provider(db_path: str, writer: Writer):
     return provider
 
 
+def _load_dotenv() -> None:
+    """Load the repo-root ``.env`` into ``os.environ``; existing vars always win."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        with open(os.path.join(root, ".env"), encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return  # no .env: normal for container/systemd deployments
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _sep, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="layawatch",
@@ -109,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    _load_dotenv()
     try:
         cfg = Config.load()
     except ConfigError as exc:

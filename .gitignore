@@ -26,6 +26,7 @@ data/
 secret.key
 api_keys.json
 api_keys.json.imported
+.env
 *.log
 
 # Model cache

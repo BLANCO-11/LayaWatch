@@ -27,3 +27,4 @@ root
 state.sqlite3*
 secret.key
 api_keys.json*
+.env
