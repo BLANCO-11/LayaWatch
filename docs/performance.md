@@ -29,8 +29,8 @@ except where LayaWatch can avoid work (see 4.12 to 4.14).
 - `scripts/budget_check.py` asserts every resource budget (`rss`, `disk`, `coldstart`,
   `idle-cpu`, `image`) and exits non-zero on failure.
 - Both run against a seeded database (`scripts/seed.py --traces 10000 --observations 9`).
-- CI runs `bench.py overhead` and `bench.py api` on every change with loose thresholds (2x budget) to
-  catch regressions, and `budget_check.py` at the Phase 8 gate with hard thresholds.
+- Run `bench.py overhead` and `bench.py api` before a release with loose thresholds (2x budget) to
+  catch regressions, and `budget_check.py` for the hard resource gate.
 - Baseline numbers are recorded in `plan/phase-7-optimization/evidence.md` before any change, so every
   optimization has a before and after.
 
@@ -119,7 +119,7 @@ how it is verified.
 ## 6. Regression guards
 
 - `bench.py` JSON results are committed per phase so drift is visible in review.
-- CI: `bench.py overhead` and `bench.py api` fail when they exceed 2x the budget (noisy environments
-  tolerated); `budget_check.py` is the hard gate at release.
+- `bench.py --strict` fails when a series exceeds 2x the budget (noisy environments tolerated);
+  `budget_check.py` is the hard gate at release.
 - Any change to the recorder, writer or query layer must include before/after numbers in the phase
   `evidence.md`. "Should be faster" is not evidence.

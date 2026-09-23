@@ -1,6 +1,6 @@
 # LayaWatch image: stage 1 builds the Next.js static export, stage 2 serves it.
 # Engine wheels are a BUILD-time option: ARG WITH_ENGINE=1 (default) installs torch + laya so
-# one image deploys the real engine; CI/console builds pass --build-arg WITH_ENGINE=0 and get
+# one image deploys the real engine; console-only builds pass --build-arg WITH_ENGINE=0 and get
 # the wheel-less image. The engine stays optional at RUNTIME as a code property: without it
 # python -m layawatch boots the lazy fake adapter (layawatch/__main__.py).
 
@@ -29,7 +29,7 @@ WORKDIR /app
 
 # Engine wheels. Declared before any app code is copied, so this layer is keyed only on the
 # pins below: layawatch/pyproject edits never re-download torch/laya. WITH_ENGINE=0 skips the
-# install (console-only/CI build, today's wheel-less behavior). Pins mirror the host venv:
+# install (console-only build, today's wheel-less behavior). Pins mirror the host venv:
 # laya's declared deps (laya-0.3.5.dist-info/METADATA) at host-resolved versions; torch is the
 # CPU wheel (+cpu) from download.pytorch.org, matching the host install. The import check is
 # the host smoke line: .venv/bin/python -c "import torch, laya".

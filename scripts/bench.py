@@ -27,8 +27,8 @@ the run to ``bench/results/<timestamp>.json`` (``all`` writes one combined file)
 
 Exit codes: 0 when every series was measured (budget verdicts are recorded in the JSON either
 way), 1 on a harness error (port busy, server died, unexpected status, unseeded database), or -
-with ``--strict`` - 1 when any budget verdict fails. CI uses ``--strict`` at 2x budget
-(``docs/performance.md`` section 2); the hard resource gate is ``scripts/budget_check.py``.
+with ``--strict`` - 1 when any budget verdict fails. ``--strict`` enforces the 2x budget guard
+(``docs/performance.md`` section 6); the hard resource gate is ``scripts/budget_check.py``.
 """
 from __future__ import annotations
 
@@ -633,7 +633,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="exit 1 when any budget verdict fails (CI runs this at 2x budget)",
+        help="exit 1 when any budget verdict fails (the 2x budget guard, performance.md section 6)",
     )
     return parser
 

@@ -114,7 +114,7 @@ without its record. Login failures record the attempted email and the ip, never 
 | Log injection | client-supplied fields in logs | control characters stripped, message length capped, structured fields escaped |
 | SQL injection | filters | every query is parameterized; filters are validated against an allowlist of columns |
 | Path traversal on static serving | `/` handler | resolved path must stay inside `web/out`, no symlink escape, explicit extension allowlist |
-| Supply chain | dependencies | runtime dependencies limited to FastAPI, uvicorn and httpx (declared in `pyproject.toml`); dev dependencies pinned in `package-lock.json` and `requirements-dev.txt` with hash verification in CI |
+| Supply chain | dependencies | runtime dependencies limited to FastAPI, uvicorn and httpx (declared in `pyproject.toml`); dev dependencies pinned in `package-lock.json` and `requirements-dev.txt` |
 
 ## 7. Data at rest and privacy
 
@@ -140,7 +140,7 @@ without its record. Login failures record the attempted email and the ip, never 
    `email`, `authorization`, `password`.
 9. Static path traversal attempts (`../`, encoded, symlink) rejected, verified by test.
 10. Container runs as a non-root user with a read-only root filesystem plus a writable volume.
-11. `pip audit` / `npm audit` run in CI; no high or critical findings at release.
+11. `pip audit` / `npm audit` are run before a release; no high or critical findings at release.
 12. Response headers: `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
     `Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'`
     (inline styles are required by the token approach; scripts are not inlined in the export).
