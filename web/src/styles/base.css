@@ -79,7 +79,7 @@ td.num,
 :focus-visible {
   outline: 2px solid var(--accent-bar);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--r-ctl);
 }
 
 ::selection {
@@ -111,7 +111,7 @@ td.num,
   z-index: 60;
   max-width: 240px;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--r-card);
   background: var(--raised);
   border: 1px solid var(--line-strong);
   box-shadow: var(--shadow-pop);

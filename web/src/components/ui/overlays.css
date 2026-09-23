@@ -5,7 +5,15 @@
 .lw-pop {
   position: absolute;
   z-index: 50;
+  /* Right edge locked to the trigger; Dropdown flips it up when the viewport
+   * bottom would cut it off, and clamps height with an internal scroll. */
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
   min-width: 200px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: var(--r-card);

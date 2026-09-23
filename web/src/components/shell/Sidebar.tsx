@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "./nav";
+import NavIcon from "./NavIcon";
 import { useAuth } from "@/components/AuthProvider";
 import { can } from "@/lib/permissions";
 import "./shell.css";
@@ -17,8 +18,7 @@ export default function Sidebar() {
     <aside className="lw-side">
       <div className="lw-brand">
         <span className="lw-brand-mark" aria-hidden="true" />
-        <span className="lw-brand-name">laya</span>
-        <span className="lw-brand-sub">ops</span>
+        <span className="lw-brand-name">LayaWatch</span>
       </div>
       <nav className="lw-nav" aria-label="Views">
         {NAV_GROUPS.map((group) => (
@@ -38,8 +38,8 @@ export default function Sidebar() {
                     className={`lw-nav-item${isActive ? " lw-active" : ""}`}
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <span className="lw-nav-dot" aria-hidden="true" />
-                    {entry.label}
+                    <NavIcon href={entry.href} />
+                    <span className="lw-nav-label">{entry.label}</span>
                   </Link>
                 );
               })}

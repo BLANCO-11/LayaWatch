@@ -37,7 +37,9 @@ export default function StackedBar({
       <div className="lw-legend" style={{ marginBottom: 14 }} aria-hidden="true">
         {keys.map((k) => (
           <span key={k.key} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <i style={{ background: k.color, width: 10, height: 10, borderRadius: 2 }} />
+            <i
+              style={{ background: k.color, width: 10, height: 10, borderRadius: "var(--r-sm)" }}
+            />
             {k.label}
           </span>
         ))}
@@ -63,7 +65,7 @@ export default function StackedBar({
               flex: 1,
               display: "flex",
               height: 14,
-              borderRadius: 3,
+              borderRadius: "var(--r-sm)",
               overflow: "hidden",
               background: "var(--bg)",
               border: "1px solid var(--line)",

@@ -21,18 +21,10 @@
   font-size: 24px;
 }
 
-.lw-auth-brand .lw-brand-sub {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .lw-auth-brand .lw-brand-mark {
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: var(--gold);
 }
 

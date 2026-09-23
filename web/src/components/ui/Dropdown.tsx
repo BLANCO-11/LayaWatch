@@ -3,8 +3,11 @@
  * select/Escape/outside click, arrows plus Home/End, focus restore. */
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import "./overlays.css";
+
+/* Layout effect, client only: SSR renders without window. */
+const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export interface MenuItem {
   key: string;
@@ -27,6 +30,7 @@ export default function Dropdown({
   const [focus, setFocus] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
   useEffect(() => {
@@ -52,7 +56,31 @@ export default function Dropdown({
   useEffect(() => {
     if (open) setFocus(0);
     else triggerRef.current?.focus();
-  }, [open ]);
+  }, [open]);
+
+  /* Place synchronously after layout: right-aligned by CSS, flip above the
+   * trigger when the viewport bottom would cut the menu off, else clamp. */
+  useIsoLayoutEffect(() => {
+    if (!open) return;
+    const pop = popRef.current;
+    if (!pop) return;
+    const place = () => {
+      pop.style.top = "";
+      pop.style.bottom = "";
+      if (pop.getBoundingClientRect().bottom > window.innerHeight - 8) {
+        pop.style.top = "auto";
+        pop.style.bottom = "calc(100% + 6px)";
+        if (pop.getBoundingClientRect().top < 8 && wrapRef.current) {
+          /* Neither edge fits (max-height already clamps): pin to viewport. */
+          pop.style.bottom = "";
+          pop.style.top = `${8 - wrapRef.current.getBoundingClientRect().top}px`;
+        }
+      }
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
 
   return (
     <div ref={wrapRef} style={{ position: "relative", display: "inline-block" }}>
@@ -69,7 +97,7 @@ export default function Dropdown({
         {trigger}
       </button>
       {open ? (
-        <div className="lw-pop" role="menu" id={menuId} aria-label={label}>
+        <div ref={popRef} className="lw-pop" role="menu" id={menuId} aria-label={label}>
           {items.map((item, i) => (
             <button
               key={item.key}

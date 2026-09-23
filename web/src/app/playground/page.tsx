@@ -59,13 +59,38 @@ const DEFAULT_QUESTIONS = `{
 }`;
 
 function answerRows(answers: Record<string, unknown>): KeyValue[] {
-  return Object.entries(answers).map(([question, answer]) => ({
-    key: question,
-    value:
-      answer !== null && typeof answer === "object"
-        ? JSON.stringify(answer)
-        : String(answer),
-  }));
+  return Object.entries(answers).map(([question, answer]) => {
+    const isObject = answer !== null && typeof answer === "object";
+    /* Confidence arrives as a 0..1 float (engine contract,
+     * scripts/smoke_laya.py); render a whole-percent chip and fall back to a
+     * muted dash when the field is missing or not a finite number - never
+     * NaN or undefined. */
+    const raw = isObject && "confidence" in answer ? answer.confidence : undefined;
+    const percent =
+      typeof raw === "number" && Number.isFinite(raw)
+        ? `${Math.round(raw * 100)}%`
+        : null;
+    return {
+      key: question,
+      value: (
+        <span
+          style={{
+            display: "inline-flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+            maxWidth: "100%",
+          }}
+        >
+          <span>{isObject ? JSON.stringify(answer) : String(answer)}</span>
+          <Chip
+            name="confidence"
+            value={percent ?? <span className="lw-hint">-</span>}
+          />
+        </span>
+      ),
+    };
+  });
 }
 
 export default function PlaygroundPage() {

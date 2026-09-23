@@ -3,7 +3,9 @@
  * payload capture, rate-limit policy with the live bucket panel,
  * diagnostics refreshed on SSE pulse, the danger zone,
  * and the footer link to the Audit view (linked from Settings, no nav
- * group). Every mutation runs through the shared helper and every control
+ * group). The cards sit under titled sub-sections (server & preferences,
+ * data & retention, rate limits, diagnostics, danger zone last and flat).
+ * Every mutation runs through the shared helper and every control
  * is permission-gated with an explained reason. */
 "use client";
 
@@ -158,6 +160,11 @@ export default function SettingsPage() {
         />
       ) : (
         <>
+          <SectionHeader
+            eyebrow="Settings"
+            title="Server & preferences"
+            meta="server facts and this browser"
+          />
           <div
             style={{
               display: "grid",
@@ -184,49 +191,81 @@ export default function SettingsPage() {
             </Card>
           </div>
 
-          <Card title="Retention and sampling" meta="estimate shown before save">
-            <RetentionCard payload={settings} me={me} onSaved={fetchSettings} />
-          </Card>
-
-          <Card title="Payload capture" meta="owner only - off by default">
-            <CaptureCard payload={settings} me={me} onSaved={fetchSettings} />
-          </Card>
-
-          <Card title="Rate limits" meta="applies on the next request - no restart">
-            {policy ? (
-              <RateLimitsCard policy={policy} me={me} onSaved={fetchPolicy} />
-            ) : policyErr ? (
-              <ErrorState
-                title="Failed to load rate limit policy"
-                detail={policyErr.message}
-                requestId={policyErr.requestId}
-                onRetry={() => void fetchPolicy()}
-              />
-            ) : (
-              <Skeleton height={120} />
-            )}
-          </Card>
-
-          <Card title="Live buckets" meta="only subjects with usage - refreshes on pulse">
-            <BucketPanel
-              items={usage}
-              error={usageErr}
-              me={me}
-              resettingKey={resettingKey}
-              onReset={resetBucket}
-              onRetry={() => void fetchUsage()}
+          <div style={{ marginTop: 24 }}>
+            <SectionHeader
+              eyebrow="Settings"
+              title="Data & retention"
+              meta="storage caps and payload capture"
             />
-          </Card>
+            <div style={{ display: "grid", gap: 16 }}>
+              <Card title="Retention and sampling" meta="estimate shown before save">
+                <RetentionCard payload={settings} me={me} onSaved={fetchSettings} />
+              </Card>
 
-          <Card title="Diagnostics" meta="self-observability - refreshes on pulse">
-            <DiagnosticsCard meta={meta} />
-          </Card>
+              <Card title="Payload capture" meta="owner only - off by default">
+                <CaptureCard payload={settings} me={me} onSaved={fetchSettings} />
+              </Card>
+            </div>
+          </div>
 
-          <Card title="Danger zone" variant="flat" meta="destructive - confirm dialogs">
-            <DangerZoneCard me={me} />
-          </Card>
+          <div style={{ marginTop: 24 }}>
+            <SectionHeader
+              eyebrow="Settings"
+              title="Rate limits"
+              meta="policy and live usage"
+            />
+            <div style={{ display: "grid", gap: 16 }}>
+              <Card title="Rate limits" meta="applies on the next request - no restart">
+                {policy ? (
+                  <RateLimitsCard policy={policy} me={me} onSaved={fetchPolicy} />
+                ) : policyErr ? (
+                  <ErrorState
+                    title="Failed to load rate limit policy"
+                    detail={policyErr.message}
+                    requestId={policyErr.requestId}
+                    onRetry={() => void fetchPolicy()}
+                  />
+                ) : (
+                  <Skeleton height={120} />
+                )}
+              </Card>
 
-          <div className="lw-hint">
+              <Card title="Live buckets" meta="only subjects with usage - refreshes on pulse">
+                <BucketPanel
+                  items={usage}
+                  error={usageErr}
+                  me={me}
+                  resettingKey={resettingKey}
+                  onReset={resetBucket}
+                  onRetry={() => void fetchUsage()}
+                />
+              </Card>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <SectionHeader
+              eyebrow="Settings"
+              title="Diagnostics"
+              meta="runtime counters"
+            />
+            <Card title="Diagnostics" meta="self-observability - refreshes on pulse">
+              <DiagnosticsCard meta={meta} />
+            </Card>
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <SectionHeader
+              eyebrow="Settings"
+              title="Danger zone"
+              meta="destructive actions"
+            />
+            <Card title="Danger zone" variant="flat" meta="destructive - confirm dialogs">
+              <DangerZoneCard me={me} />
+            </Card>
+          </div>
+
+          <div className="lw-hint" style={{ marginTop: 16 }}>
             <Link href="/audit">Audit log</Link>
             {" - append-only record of every mutation, filterable by actor, action and range."}
           </div>

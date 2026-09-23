@@ -15,7 +15,7 @@ import "@/components/ui/overlays.css";
 import "@/components/ui/misc.css";
 
 export const metadata: Metadata = {
-  title: "laya ops",
+  title: "LayaWatch",
   description: "LayaWatch observability console for the laya decision engine",
 };
 

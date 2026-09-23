@@ -34,7 +34,7 @@ Components reference roles only. No component may hardcode a hex value.
 | `--text` | primary text | `#EFEDE6` | `#2A2216` |
 | `--text-2` | secondary text, table cells | `#B3B1A8` | `#685D48` |
 | `--text-3` | labels, meta, axis text | `#7A7974` | `#978B76` |
-| `--accent-bar` | interactive fill: chart primary, rails, dots | `#D4A94E` (gold) | `#B4602F` (terracotta) |
+| `--accent-bar` | interactive fill: chart primary, rails, active nav icon | `#D4A94E` (gold) | `#B4602F` (terracotta) |
 | `--accent-text` | links, accent text | `#E2BB63` | `#9A4C26` |
 | `--accent-fill` / `-hover` | primary button fill | `#D4A94E` / `#E3BC63` | `#A9502F` / `#8C4123` |
 | `--on-accent` | text on accent fill | `#1A160E` | `#FFFFFF` |
@@ -69,9 +69,9 @@ Scale: `11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 16 / 20 / 21 / 24`. Numerals ar
 ### 1.3 Space, radius, borders, elevation
 
 - Space scale: `4 / 8 / 12 / 16 / 24 / 32 / 48` (`--sp1..--sp6`). No arbitrary values.
-- Radius lock: `--r-pill 9999px` (badges, pills, switch), `--r-card 10px` (cards, panels),
-  `--r-ctl 8px` (buttons, inputs, nav items), `--r-sm 6px` (chips, wells, bars). Never mix within one
-  component family.
+- Radius lock: `--r-pill 9999px` (badges, pills, switch), `--r-card 6px` (cards, panels),
+  `--r-ctl 4px` (buttons, inputs, nav items), `--r-sm 3px` (chips, wells, bars). Never mix
+  within one component family.
 - Borders: exactly one weight, `1px`. Dashed only for "shown once" secrets and drop targets.
 - Elevation tokens:
   - `--shadow-card`: resting card. Dark adds a 1 px top highlight because shadows are invisible on ink.
@@ -101,8 +101,8 @@ Scale: `11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 16 / 20 / 21 / 24`. Numerals ar
 
 | Breakpoint | Shell | Grid |
 |---|---|---|
-| >= 1080 px | sidebar 232 px fixed, topbar 56 px sticky | KPI 4 columns, charts 2 columns, content max 1440 px |
-| 900 to 1080 px | sidebar 232 px, charts collapse to 1 column | KPI 4 columns |
+| >= 1080 px | sidebar 232 px (64 px icon rail at rest, expands on hover or focus), topbar 56 px sticky | KPI 4 columns, charts 2 columns, content max 1440 px |
+| 900 to 1080 px | sidebar as above, charts collapse to 1 column | KPI 4 columns |
 | 640 to 900 px | sidebar becomes horizontal scrollable nav under the topbar, sticky headers off | KPI 2 columns |
 | < 640 px | same as above, content padding 16 px | KPI 1 column, definition lists stack |
 
@@ -142,7 +142,11 @@ Scale: `11 / 11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 16 / 20 / 21 / 24`. Numerals ar
 
 - Nav groups are fixed: **Observe** (Overview, Traces, Metrics, Logs), **Operate** (Playground,
   Checkpoints), **Admin** (API Keys, Users, Settings).
-- Active nav item: raised surface, accent rail on the left, accent dot, weight 600. Exactly one active.
+- Active nav item: raised surface, accent rail on the left, accent icon, weight 600. Exactly one active.
+- Every entry carries a 16 px geometric line icon (1.5). At >= 901 px the sidebar rests as a 64 px
+  icon rail: entry icons only, brand mark and icons on one centred column, expanding to 232 px on
+  pointer hover or keyboard focus. Collapsed state keys off `:focus-visible`, never `:focus-within`,
+  so a mouse click on a nav link does not latch the rail open after navigation.
 - The sidebar footer is the always-visible health block: poll mode, auth state, uptime, device, ring
   size. It is never hidden except under 900 px.
 - Page header pattern: mono eyebrow (group name) plus serif title, single line, no breadcrumbs for
@@ -157,7 +161,8 @@ Each entry defines anatomy, attributes, behavior, accessibility and content rule
 
 ### 4.1 Button
 
-- **Anatomy:** container (radius 8, height 34/28, padding 16/12) plus optional leading icon and label.
+- **Anatomy:** container (radius 4, height 34/28, padding 16/12) plus optional leading icon and
+  label.
 - **Variants:** `primary` (accent fill, `--on-accent` text, shadow-card, hover shadow-lift),
   `secondary` (raised surface, `--line` border, shadow-card), `ghost` (transparent, `--text-2`, hover
   `--tint-hover`), `danger` (transparent, `--err` text, 40 % `--err` border, hover 10 % `--err` wash).
@@ -230,7 +235,7 @@ mono 11 px `--text-3`. Used once per content block. Not interactive.
 
 ### 4.10 KPI cell and KPI strip
 
-- **Anatomy:** strip is a flat bordered container, radius 10, divided by 1 px lines; each cell: mono
+- **Anatomy:** strip is a flat bordered container, radius 6, divided by 1 px lines; each cell: mono
   uppercase label, value (mono 24 px, weight 600, tabular), delta line (mono 11 px, `--text-3`, or
   `ok`/`err`/`warn` when the delta has a direction).
 - **Attributes:** 4 columns desktop, 2 tablet, 1 mobile. Units are inline in a smaller `--text-3` span.
@@ -311,13 +316,13 @@ score submissions and lifecycle events (model loaded, retention applied).
 
 ### 4.18 Dropdown menu
 
-Raised popover (`--shadow-pop`, radius 10, 4 px inner padding), items 30 px, mono or sans 13 px,
+Raised popover (`--shadow-pop`, radius 6, 4 px inner padding), items 30 px, mono or sans 13 px,
 destructive items in `--err`. Opens on click, closes on select, `Escape`, or outside click. Keyboard:
 arrows move, `Enter` selects, `Home`/`End` jump. Anchored to the trigger, never centered.
 
 ### 4.19 Dialog (modal)
 
-Centered, max width 480 px (confirm) or 640 px (form), `--surface`, radius 10, shadow-pop, scrim
+Centered, max width 480 px (confirm) or 640 px (form), `--surface`, radius 6, shadow-pop, scrim
 `rgba(0,0,0,.5)` dark / `rgba(40,32,20,.35)` light. Title serif 16 px, body 13.5 px, footer right
 aligned with one primary action. Focus is trapped, `Escape` cancels, initial focus lands on the least
 destructive control. Destructive dialogs name the object (`Revoke lay_3f8a...`) and require an explicit

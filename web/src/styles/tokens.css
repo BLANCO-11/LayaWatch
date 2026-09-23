@@ -29,9 +29,9 @@
 
   /* 1.3 radius lock */
   --r-pill: 9999px;
-  --r-card: 10px;
-  --r-ctl: 8px;
-  --r-sm: 6px;
+  --r-card: 6px;
+  --r-ctl: 4px;
+  --r-sm: 3px;
 
   /* 1.4 motion: one duration, one easing */
   --t: 120ms ease;

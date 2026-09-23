@@ -76,8 +76,7 @@ export default function LoginPage() {
     <div className="lw-auth">
       <div className="lw-auth-brand">
         <span className="lw-brand-mark" aria-hidden="true" />
-        <span className="lw-brand-name">laya</span>
-        <span className="lw-brand-sub">ops</span>
+        <span className="lw-brand-name">LayaWatch</span>
       </div>
       <Suspense>
         <LoginForm />

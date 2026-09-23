@@ -53,7 +53,7 @@
 .lw-brand-mark {
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: var(--gold);
   transform: translateY(-1px);
 }
@@ -63,14 +63,6 @@
   font-weight: 700;
   font-size: 20px;
   letter-spacing: 0.01em;
-}
-
-.lw-brand-sub {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .lw-nav {
@@ -115,13 +107,16 @@
   text-decoration: none;
 }
 
-.lw-nav-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--line-strong);
-  transition: background var(--t);
+.lw-nav-icon {
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
+  color: var(--text-3);
+  transition: color var(--t);
+}
+
+.lw-nav-item:hover .lw-nav-icon {
+  color: var(--text-2);
 }
 
 .lw-nav-item.lw-active {
@@ -131,8 +126,8 @@
   box-shadow: var(--shadow-card);
 }
 
-.lw-nav-item.lw-active .lw-nav-dot {
-  background: var(--accent-bar);
+.lw-nav-item.lw-active .lw-nav-icon {
+  color: var(--accent-bar);
 }
 
 .lw-nav-item.lw-active::before {
@@ -142,7 +137,7 @@
   top: 7px;
   bottom: 7px;
   width: 2.5px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   background: var(--accent-bar);
 }
 
@@ -261,6 +256,7 @@
 }
 
 .lw-theme-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -286,16 +282,36 @@
 }
 
 .lw-theme-btn svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
   width: 14px;
   height: 14px;
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
 }
 
-[data-theme="dark"] .lw-ic-moon {
-  display: none;
+/* Moon <-> sun morph on toggle: outgoing icon rotates out while fading,
+ * incoming icon rotates in, both directions, inline SVG pair, no deps. */
+.lw-ic-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+.lw-ic-moon {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.4);
 }
 
 [data-theme="light"] .lw-ic-sun {
-  display: none;
+  opacity: 0;
+  transform: rotate(90deg) scale(0.4);
+}
+
+[data-theme="light"] .lw-ic-moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
 }
 
 .lw-content {
@@ -328,6 +344,95 @@
 .lw-sec-meta {
   color: var(--text-3);
   text-align: right;
+}
+
+/* Collapsible sidebar (>=901px): collapsed 64px rail by default, expands on
+ * hover or keyboard focus, stays open while the pointer or focus is inside,
+ * collapses when it leaves. Labels and the health foot fade with the width;
+ * the entry icons stay visible as a compact rail.
+ * Focus expansion keys off :focus-visible, never :focus-within: a mouse click
+ * on a nav link leaves the anchor focused, and :focus-within would latch the
+ * rail open after every navigation. The horizontal nav below (<=900px) keeps
+ * full labels and is unaffected. */
+@media (min-width: 901px) {
+  .lw-side {
+    width: 64px;
+    flex: 0 0 64px;
+    overflow: hidden;
+    transition:
+      width 180ms ease,
+      flex-basis 180ms ease;
+  }
+
+  .lw-side:hover,
+  .lw-side:has(:focus-visible) {
+    width: 232px;
+    flex: 0 0 232px;
+  }
+
+  /* Brand name, labels and the health foot fade with the width; the entry
+   * icons stay visible as a compact rail. */
+  .lw-brand-name,
+  .lw-nav-group,
+  .lw-nav-label,
+  .lw-side-foot {
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+
+  /* Text leaves the layout while collapsed so the rail is a single centered
+   * icon column; the rail's own width clips it as it opens. The label gap goes
+   * with it, otherwise the icon sits left of the rail centre. */
+  .lw-brand-name,
+  .lw-nav-label {
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .lw-brand,
+  .lw-nav-item {
+    gap: 0;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .lw-side:hover .lw-brand-name,
+  .lw-side:has(:focus-visible) .lw-brand-name,
+  .lw-side:hover .lw-nav-group,
+  .lw-side:has(:focus-visible) .lw-nav-group,
+  .lw-side:hover .lw-nav-label,
+  .lw-side:has(:focus-visible) .lw-nav-label,
+  .lw-side:hover .lw-side-foot,
+  .lw-side:has(:focus-visible) .lw-side-foot {
+    opacity: 1;
+  }
+
+  .lw-side:hover .lw-brand-name,
+  .lw-side:has(:focus-visible) .lw-brand-name,
+  .lw-side:hover .lw-nav-label,
+  .lw-side:has(:focus-visible) .lw-nav-label {
+    width: auto;
+  }
+
+  .lw-side:hover .lw-brand,
+  .lw-side:has(:focus-visible) .lw-brand {
+    gap: var(--sp2);
+    justify-content: flex-start;
+    padding-inline: 18px;
+  }
+
+  .lw-side:hover .lw-nav-item,
+  .lw-side:has(:focus-visible) .lw-nav-item {
+    gap: 10px;
+    justify-content: flex-start;
+    padding-inline: 10px;
+  }
+
+  /* Collapsed rail never needs horizontal scrolling; labels are clipped. */
+  .lw-nav {
+    overflow-x: hidden;
+  }
 }
 
 /* Responsive matrix: 900px sidebar collapses to a horizontal nav. */
@@ -390,5 +495,18 @@
 
   .lw-content {
     padding: 16px;
+  }
+}
+
+/* Reduced motion: the sidebar rail and the moon/sun morph swap instantly.
+ * Durations here are literal (not --t) so this block owns them. */
+@media (prefers-reduced-motion: reduce) {
+  .lw-side,
+  .lw-brand-name,
+  .lw-nav-group,
+  .lw-nav-label,
+  .lw-side-foot,
+  .lw-theme-btn svg {
+    transition: none;
   }
 }

@@ -53,7 +53,7 @@
 .lw-legend-chip i {
   width: 10px;
   height: 10px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
   flex: 0 0 auto;
 }
 
@@ -107,7 +107,7 @@
   height: 18px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   box-shadow: var(--shadow-inset);
   position: relative;
   overflow: hidden;
@@ -118,7 +118,7 @@
   top: 2px;
   bottom: 2px;
   min-width: 2px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   background: var(--accent-bar);
 }
 
