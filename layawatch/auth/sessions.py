@@ -8,8 +8,8 @@ default 30 days) and a sliding ``last_seen`` written at most once a minute. Cook
 (``X-Forwarded-Proto: https``); the readable ``lw_csrf`` twin is issued by ``api/auth``.
 
 ``authenticate`` resolves a request to a ``Principal`` from the first credential present:
-session cookie (browser), ``X-Admin-Token`` (legacy automation, owner-equivalent per
-security.md 3.4), or ``X-API-Key``/``Bearer`` (CI reads, viewer per api-reference 1).
+session cookie (browser) or ``X-API-Key``/``Bearer`` (CI reads, viewer per api-reference 1).
+An ``X-Admin-Token`` header authenticates nothing since v0.1.0 (plan phase-8 task 9).
 ``gate`` is the shared entry guard every auth/users/keys handler calls: 401 without a
 credential, 403 for a ``must_change`` user anywhere but ``POST /api/v1/auth/password``,
 CSRF for session mutations, then the shared permission table from ``auth.users``.
@@ -21,22 +21,18 @@ handlers this wave does not own.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import secrets
 import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from layawatch.auth.csrf import cookie_value, is_mutating, verify
 from layawatch.auth.users import require_permission
 from layawatch.engine.keys import load_pepper, verify_key
 from layawatch.http.types import HttpError, Request
 from layawatch.store.db import connect
-
-if TYPE_CHECKING:
-    from layawatch.config import Config
 
 SESSION_COOKIE = "lw_session"
 AUTH_CODE = "missing_or_invalid_credential"
@@ -55,9 +51,9 @@ _TOUCH_INTERVAL = 60.0
 class Principal:
     """The authenticated caller behind a request, in every form api-reference 1 allows."""
 
-    kind: str  # session | admin_token | api_key
+    kind: str  # session | api_key
     role: str  # owner | admin | viewer
-    actor: str  # audit actor: email, "legacy-admin-token" or "key:<id>"
+    actor: str  # audit actor: email or "key:<id>"
     actor_id: str | None = None  # user id for session principals
     user: Any = None  # user row (id/email/name/role/password_hash/must_change)
     session_id: str | None = None
@@ -175,13 +171,13 @@ def revoke_all_sessions(conn: sqlite3.Connection, keep_session_id: str | None) -
     return cursor.rowcount
 
 
-def authenticate(request: Request, config: Config, db_path: str | Path) -> Principal | None:
-    """Resolve the request's first credential to a Principal; None when none verifies.
+def authenticate(request: Request, db_path: str | Path) -> Principal | None:
+    """Resolve the request's first credential to a ``Principal``; None when none verifies.
 
-    Order: session cookie, then ``X-Admin-Token`` (owner-equivalent, security.md 3.4),
-    then ``X-API-Key``/``Authorization: Bearer`` (viewer on reads, api-reference 1). A
-    resolved session is cached on the request so a handler behind the middleware gate
-    never resolves the same cookie twice.
+    Order: session cookie, then ``X-API-Key``/``Authorization: Bearer`` (viewer on reads,
+    api-reference 1). An ``X-Admin-Token`` header authenticates nothing (plan phase-8
+    task 9). A resolved session is cached on the request so a handler behind the
+    middleware gate never resolves the same cookie twice.
     """
     cached = getattr(request, "principal", None)
     if isinstance(cached, Principal):
@@ -197,12 +193,6 @@ def authenticate(request: Request, config: Config, db_path: str | Path) -> Princ
             return None
         session, user = resolved
         principal = _session_principal(session, user)
-        request.principal = principal  # type: ignore[attr-defined]
-        return principal
-    admin_token = config.admin_token
-    presented_admin = request.headers.get("x-admin-token", "")
-    if admin_token and presented_admin and hmac.compare_digest(presented_admin, admin_token):
-        principal = Principal(kind="admin_token", role="owner", actor="legacy-admin-token")
         request.principal = principal  # type: ignore[attr-defined]
         return principal
     presented_key = _presented_key(request)
@@ -225,7 +215,6 @@ def authenticate(request: Request, config: Config, db_path: str | Path) -> Princ
 def gate(
     request: Request,
     conn: sqlite3.Connection,
-    config: Config,
     db_path: str | Path,
     permission: str | None,
     *,
@@ -240,7 +229,7 @@ def gate(
     before raising 403 (security.md invariant 3). ``permission=None`` skips the role
     check for endpoints any authenticated role may call (logout, me).
     """
-    principal = authenticate(request, config, db_path)
+    principal = authenticate(request, db_path)
     if principal is None:
         raise HttpError(401, AUTH_CODE, "missing or invalid credential")
     if principal.kind == "session":
@@ -261,8 +250,8 @@ def gate(
 def enforce_browser_session(request: Request, db_path: str | Path) -> None:
     """Central half of :func:`gate` for ``http/middleware.instrument``.
 
-    Requests with no ``lw_session`` cookie pass through untouched (API-key, admin-token
-    and unauthenticated callers keep their current behavior). With a cookie: an
+    Requests with no ``lw_session`` cookie pass through untouched (API-key and
+    unauthenticated callers keep their current behavior). With a cookie: an
     invalid/expired session is 401, a ``must_change`` user is 403 everywhere except
     ``POST /api/v1/auth/password``, and a mutating request must echo ``lw_csrf`` in
     ``X-CSRF-Token``. A valid session is cached on the request for the handler's gate.

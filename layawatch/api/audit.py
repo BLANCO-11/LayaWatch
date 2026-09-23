@@ -21,7 +21,6 @@ from layawatch.store import queries
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
-    from layawatch.config import Config
     from layawatch.http.router import Router
 
 #: Section 13 query contract; anything else is a 400 invalid_filter.
@@ -30,7 +29,7 @@ _PARAMS = frozenset({"actor", "action", "since", "until", "range", "limit", "cur
 _COLUMNS = "id, ts, actor_id, actor, action, target, result, meta"
 
 
-def add_audit_routes(router: Router, *, config: Config, db_path: str | Path) -> None:
+def add_audit_routes(router: Router, *, db_path: str | Path) -> None:
     """Register ``GET /api/v1/audit`` on ``router``."""
 
     def list_audit(request: Request) -> Response:
@@ -71,7 +70,7 @@ def add_audit_routes(router: Router, *, config: Config, db_path: str | Path) -> 
 
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "audit.read")
+            gate(request, conn, db_path, "audit.read")
             rows = conn.execute(
                 f"SELECT {_COLUMNS} FROM audit_log WHERE {where_sql}"
                 " ORDER BY ts DESC, id DESC LIMIT ?",

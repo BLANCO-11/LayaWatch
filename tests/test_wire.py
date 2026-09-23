@@ -152,7 +152,6 @@ def wire(tmp_path_factory) -> SimpleNamespace:
         port=_pick_port(),
         state_dir=base,
         db_path=db_path,
-        admin_token="admintok-should-not-leak",
         session_secret="sessiontok-should-not-leak",
     )
     router = Router()
@@ -164,7 +163,6 @@ def wire(tmp_path_factory) -> SimpleNamespace:
         started_at=_STARTED_AT,
         counters=lambda: dict(_COUNTERS),
         sse_clients=lambda: 0,
-        deprecations=lambda: {"legacy_stats": 1},
     )
     router.add("GET", "/big", big_json)
     router.add("GET", "/small", small_json)
@@ -284,13 +282,11 @@ def test_meta_reports_criterion_five_keys_counters_and_safe_config(wire) -> None
     assert isinstance(payload["uptime_s"], (int, float)) and payload["uptime_s"] >= 12.4
     assert isinstance(payload["started_at"], float)
     assert payload["started_at"] == pytest.approx(_STARTED_AT)
-    assert payload["deprecation"] == {"legacy_stats": 1}
+    assert "deprecation" not in payload  # legacy shim counters removed in v0.1.0
 
     assert set(payload["config"]) == _SAFE_CONFIG
     for leaked in (
-        "admin_token",
         "session_secret",
-        "admintok",
         "sessiontok",
         str(wire.base),
         "state_dir",

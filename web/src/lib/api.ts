@@ -334,7 +334,6 @@ export interface MetaResponse {
   write_queue_depth?: number;
   write_latency_ms?: number;
   config?: MetaConfig;
-  deprecation?: Record<string, number>;
   [key: string]: unknown;
 }
 

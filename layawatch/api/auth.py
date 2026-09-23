@@ -158,7 +158,7 @@ def add_auth_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     def logout(request: Request) -> Response:
         conn = connect(db_path)
         try:
-            principal = gate(request, conn, config, db_path, None, action="auth.logout")
+            principal = gate(request, conn, db_path, None, action="auth.logout")
             if principal.kind != "session" or principal.session_id is None:
                 raise HttpError(401, AUTH_CODE, "no session to log out of")
             revoke_session(conn, principal.session_id)
@@ -183,7 +183,7 @@ def add_auth_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     def me(request: Request) -> Response:
         conn = connect(db_path)
         try:
-            principal = gate(request, conn, config, db_path, None)
+            principal = gate(request, conn, db_path, None)
             if principal.kind != "session":
                 raise HttpError(401, AUTH_CODE, "session cookie required")
             user = principal.user
@@ -205,9 +205,7 @@ def add_auth_routes(router: Router, *, config: Config, db_path: str | Path) -> N
             raise _bad("new_password", "'new_password' is required")
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, None, action=None
-            )
+            principal = gate(request, conn, db_path, None, action=None)
             if principal.kind != "session":
                 raise HttpError(401, AUTH_CODE, "session cookie required")
             user = principal.user
@@ -282,8 +280,8 @@ def add_auth_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     router.add("GET", "/api/v1/auth/me", me)
     router.add("POST", "/api/v1/auth/password", change_password)
     router.add("POST", "/api/v1/auth/setup", setup)
-    add_user_routes(router, config=config, db_path=db_path)
-    add_key_routes(router, config=config, db_path=db_path)
+    add_user_routes(router, db_path=db_path)
+    add_key_routes(router, db_path=db_path)
 
 
 def _bootstrap_owner(config: Config, db_path: str | Path) -> None:

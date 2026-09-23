@@ -5,14 +5,13 @@ default, device, rss_mb}`` where ``loaded`` comes from the adapter (``loaded()``
 ``device()`` never construct the engine, so a GET can never trigger a checkpoint download)
 and ``available``/``default`` are the configured checkpoints - ``["english"]`` under
 ``english_only``, mirroring what ``RealAdapter`` will boot with. ``default`` carries the same
-adjusted list because that is what legacy/serve.py exposed as ``default: MODELS`` for the old
-admin page through the section 14 shim; the two keys may diverge once a wider engine catalog
-exists.
+adjusted list because that is what the pre-v0.1.0 server exposed as ``default: MODELS``; the
+two keys may diverge once a wider engine catalog exists.
 
 Mutations accept the section 11 bodies (``POST /api/v1/models/load`` and
 ``POST /api/v1/models/unload`` with ``{models: [...]}``) plus ``POST /api/v1/models`` with
-``{action: "load"|"unload", models: [...]}`` - the body legacy/serve.py's admin page sends
-and the target the section 14 shim maps onto, so old clients keep working. Rejections map per
+``{action: "load"|"unload", models: [...]}`` - the pre-v0.1.0 admin body shape, kept so old
+clients keep working. Rejections map per
 the wave contract: adapter ``ValueError`` (unknown checkpoint) is ``400 invalid_request``,
 the in-flight ``RuntimeError`` is ``409 load_in_progress``, ``EngineMemoryError`` is
 ``503 insufficient_memory`` carrying the message in ``details``, and a bad ``action`` or
@@ -161,7 +160,7 @@ def _apply(adapter: EngineAdapter, action: str, models: list[str]) -> None:
 def _rss_mb() -> float:
     """Resident set size in MiB from ``/proc/self/status``; 0.0 where unavailable.
 
-    Same source as legacy/serve.py's ``_rss_mb`` and ``api/health.py``'s copy: section 11's
+    Same source as the pre-v0.1.0 server's ``_rss_mb`` and ``api/health.py``'s copy: section 11's
     ``rss_mb`` is process-wide, not per-model.
     """
     try:

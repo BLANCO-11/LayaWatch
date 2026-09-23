@@ -2,8 +2,8 @@
 
 Contract from docs/api-reference.md section 4: the body is ``{state, questions, model?,
 task?, lang?, temperature?}``; both endpoints answer the adapter's JSON shape and record a
-trace. Engine rejections map the way legacy/serve.py mapped them - an english-only refusal
-becomes 422, any other ``ValueError`` becomes 400, everything else escapes to the router's
+trace. Engine rejections map the way the pre-v0.1.0 legacy server mapped them - an english-only
+refusal becomes 422, any other ``ValueError`` becomes 400, everything else escapes to the router's
 500 ``internal_error`` without leaking exception text into the body.
 """
 from __future__ import annotations
@@ -77,13 +77,13 @@ def _validated(request: Request) -> dict[str, Any]:
 
 
 def _param(payload: dict[str, Any], name: str) -> Any:
-    """Truthy body override (legacy/serve.py passes ``model``/``task`` through verbatim)."""
+    """Truthy body override (the pre-v0.1.0 server passed ``model``/``task`` through verbatim)."""
     value = payload.get(name)
     return value if value else None
 
 
 def _guard(call: Callable[[], dict]) -> dict:
-    """Map engine rejections to HTTP the way legacy/serve.py did: 422 refusal, 400 ValueError.
+    """Map engine rejections to HTTP the way the pre-v0.1.0 server did: 422 refusal, 400 ValueError.
 
     ``EnglishOnlyError`` subclasses ``ValueError``, so it is caught first: a non-English
     state in an english-only deployment is a 422 ``english_only`` carrying the legacy

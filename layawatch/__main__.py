@@ -11,7 +11,6 @@ from layawatch.api.audit import add_audit_routes
 from layawatch.api.auth import add_auth_routes
 from layawatch.api.engine import add_engine_routes
 from layawatch.api.health import add_health_routes, add_meta_routes, add_root_route
-from layawatch.api.legacy import add_legacy_routes, deprecation_counts
 from layawatch.api.logs import add_logs_routes
 from layawatch.api.metrics import add_metrics_routes
 from layawatch.api.models import add_model_routes
@@ -200,16 +199,15 @@ def main(argv: list[str] | None = None) -> int:
         started_at=started_at,
         counters=writer.counters,
         sse_clients=hub.client_count,
-        deprecations=deprecation_counts,
     )
     add_trace_routes(router, cfg.db_path)
-    add_range_delete_route(router, cfg.db_path, config=cfg)
+    add_range_delete_route(router, cfg.db_path)
     add_metrics_routes(router, cfg.db_path)
     add_logs_routes(router, cfg.db_path)
     add_settings_routes(router, cfg, cfg.db_path)
     add_ratelimit_routes(router, config=cfg, db_path=cfg.db_path)
-    add_audit_routes(router, config=cfg, db_path=cfg.db_path)
-    add_playground_routes(router, adapter, config=cfg, db_path=cfg.db_path, recorder=recorder)
+    add_audit_routes(router, db_path=cfg.db_path)
+    add_playground_routes(router, adapter, db_path=cfg.db_path, recorder=recorder)
     add_auth_routes(router, config=cfg, db_path=cfg.db_path)
     add_model_routes(router, adapter, cfg, cfg.db_path, on_change=hub.publish_model)
     add_engine_routes(router, adapter)
@@ -221,7 +219,6 @@ def main(argv: list[str] | None = None) -> int:
         pulse_provider=_pulse_provider(str(cfg.db_path), writer),
         counter_provider=writer.counters,
     )
-    add_legacy_routes(router)
     mount_static(router, cfg.web_root)
     conn.close()
 

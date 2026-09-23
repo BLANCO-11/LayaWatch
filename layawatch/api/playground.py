@@ -32,7 +32,6 @@ from layawatch.http.types import HttpError, Request, Response, json_response
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
-    from layawatch.config import Config
     from layawatch.http.router import Router
     from layawatch.obs.recorder import Context, Recorder
 
@@ -83,7 +82,6 @@ def add_playground_routes(
     router: Router,
     adapter: Any,
     *,
-    config: Config,
     db_path: str | Path,
     recorder: Recorder,
 ) -> None:
@@ -95,7 +93,7 @@ def add_playground_routes(
             raise HttpError(400, "invalid_filter", f"unknown query parameter {unknown!r}")
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, None)
+            gate(request, conn, db_path, None)
         finally:
             conn.close()
         return json_response({"items": list(_TEMPLATES)})
@@ -103,7 +101,7 @@ def add_playground_routes(
     def run(request: Request) -> Response:
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "playground.run")
+            gate(request, conn, db_path, "playground.run")
         finally:
             conn.close()
         ctx = recorder.start(
@@ -206,7 +204,7 @@ def _validated(request: Request) -> dict[str, Any]:
 
 
 def _param(payload: dict[str, Any], name: str) -> Any:
-    """Truthy body override (legacy/serve.py passes ``model``/``task`` through verbatim)."""
+    """Truthy body override (the pre-v0.1.0 server passed ``model``/``task`` through verbatim)."""
     value = payload.get(name)
     return value if value else None
 

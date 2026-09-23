@@ -27,6 +27,11 @@ _log = get_logger("static")
 
 _API_PREFIX = "/api/"
 _API_EXACT = frozenset({"/predict", "/route", "/healthz"})
+#: The ``/admin`` surface removed in v0.1.0 (plan phase-8 task 9): those paths answer the
+#: standard ``404 not_found`` JSON envelope instead of the HTML console 404 page, so
+#: leftover automation gets a machine-readable error (acceptance criterion 9).
+_ADMIN_REMOVED = frozenset({"/admin"})
+_ADMIN_REMOVED_PREFIX = "/admin/api/"
 
 # Extension allowlist; anything else is never served.
 _CONTENT_TYPES: dict[str, str] = {
@@ -236,12 +241,18 @@ def resolve(path: str, web_root: Path, accept: str = "") -> Response | None:
 
     Percent-decodes the path once, rejects ``..`` segments and anything escaping
     ``web_root`` after ``Path.resolve()``, and never serves directories. API-shaped
-    paths raise ``HttpError(404, "not_found")`` so callers render the JSON envelope.
+    paths and the ``/admin`` paths removed in v0.1.0 raise ``HttpError(404,
+    "not_found")`` so callers render the JSON envelope.
     ``accept`` is the request's ``Accept-Encoding``: it selects a precompressed
     sidecar when the build produced one (catalog 4.6 item 31).
     """
     decoded = unquote(path)
-    if decoded.startswith(_API_PREFIX) or decoded in _API_EXACT:
+    if (
+        decoded.startswith(_API_PREFIX)
+        or decoded.startswith(_ADMIN_REMOVED_PREFIX)
+        or decoded in _API_EXACT
+        or decoded in _ADMIN_REMOVED
+    ):
         raise HttpError(404, "not_found", "not found")
     if "\x00" in decoded or ".." in decoded.split("/"):
         return None

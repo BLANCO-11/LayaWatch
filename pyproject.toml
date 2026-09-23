@@ -5,6 +5,12 @@ description = "Self-hosted observability console for the laya decision engine"
 requires-python = ">=3.12"
 dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27"]
 
+[tool.setuptools.package-data]
+# Non-.py assets the runtime reads from the INSTALLED package: without these the
+# pip-installed image boots with an empty migrations/ dir and cannot create any table
+# (plan phase-8 release gate; caught by the hardened-container probe).
+layawatch = ["store/schema.sql", "store/migrations/*.sql"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

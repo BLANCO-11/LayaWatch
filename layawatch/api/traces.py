@@ -27,7 +27,6 @@ from layawatch.store import queries
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
-    from layawatch.config import Config
     from layawatch.http.router import Router
 
 #: Time-window parameters the D-013 range delete accepts (section 2 shorthand included).
@@ -197,7 +196,7 @@ def add_trace_routes(router: Router, db_path: str | Path) -> None:
     router.add("DELETE", "/api/v1/traces/*", delete_route)
 
 
-def add_range_delete_route(router: Router, db_path: str | Path, *, config: Config) -> None:
+def add_range_delete_route(router: Router, db_path: str | Path) -> None:
     """Register ``DELETE /api/v1/traces?since=&until=`` (plan phase-6 D-013).
 
     Danger-zone bulk delete: at least one time bound is required (an unbounded delete is
@@ -238,9 +237,7 @@ def add_range_delete_route(router: Router, db_path: str | Path, *, config: Confi
 
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "traces.delete", action="trace.deleted"
-            )
+            principal = gate(request, conn, db_path, "traces.delete", action="trace.deleted")
             deleted = conn.execute(
                 f"DELETE FROM traces WHERE {where_sql}", args
             ).rowcount

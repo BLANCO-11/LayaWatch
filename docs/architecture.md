@@ -297,13 +297,12 @@ Existing engine variables keep working. New variables are prefixed `LAYWATCH_`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LAYA_STATE_DIR` | process directory | state root; contains `state.sqlite3`, `api_keys.json` (legacy), `secret.key` |
+| `LAYA_STATE_DIR` | process directory | state root; contains `state.sqlite3`, `api_keys.json` (legacy, imported once in v0.1.0), `secret.key` |
 | `LAYA_PORT` | `8050` | bind port |
 | `LAYWATCH_BIND` | `127.0.0.1` | bind address; set `0.0.0.0` only behind a proxy |
 | `LAYA_MODELS` | `english,multilingual` | checkpoints to preload (`all` for every one) |
 | `LAYA_DEVICE` | auto | torch device |
 | `LAYA_ENGLISH_ONLY` | off | refuse non-English states, drop multilingual |
-| `LAYA_ADMIN_TOKEN` | unset | legacy admin token; when set, `/api/v1` mutations also accept it (compat) |
 | `LAYWATCH_SESSION_SECRET` | generated into `secret.key` | session and CSRF signing |
 | `LAYWATCH_SESSION_TTL` | `2592000` | session lifetime, seconds |
 | `LAYWATCH_TRACE_SAMPLE` | `1.0` | fraction of successful traces recorded; errors always recorded |

@@ -86,9 +86,7 @@ def add_settings_routes(router: Router, config: Config, db_path: str | Path) -> 
             stored[name] = _control_text(name, value)
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "settings.write", action="settings.updated"
-            )
+            principal = gate(request, conn, db_path, "settings.write", action="settings.updated")
             if "capture_payloads" in stored:
                 require_permission(
                     conn, principal, "settings.capture", action="payload_capture.toggled"

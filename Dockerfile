@@ -31,6 +31,13 @@ COPY pyproject.toml /build/pyproject.toml
 COPY layawatch /build/layawatch
 RUN pip install --no-cache-dir /build && rm -rf /build
 
+# Password deny list: auth/passwords.py resolves the repository-root data/ dir as
+# parents[2] of the installed auth/passwords.py, i.e. site-packages/data/ in an image.
+COPY data/common_passwords.txt /tmp/common_passwords.txt
+RUN SITE="$(python -c 'import site; print(site.getsitepackages()[0])')" \
+    && mkdir -p "$SITE/data" \
+    && mv /tmp/common_passwords.txt "$SITE/data/common_passwords.txt"
+
 # Static export served from the working directory (config.web_root default is web/out).
 COPY --from=web /build/out /app/web/out
 

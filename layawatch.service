@@ -1,0 +1,22 @@
+# LayaWatch systemd unit (docs/operations.md section 2.3; plan phase-8 task 6).
+# Install: sudo cp layawatch.service /etc/systemd/system/ && sudo systemctl daemon-reload
+[Unit]
+Description=LayaWatch
+After=network-online.target
+
+[Service]
+User=layawatch
+WorkingDirectory=/opt/layawatch
+Environment=LAYA_STATE_DIR=/var/lib/layawatch
+Environment=LAYWATCH_BIND=127.0.0.1
+ExecStart=/opt/layawatch/.venv/bin/python -m layawatch
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/layawatch
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

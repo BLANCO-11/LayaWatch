@@ -30,7 +30,7 @@ def _build(tmp_path: Path) -> tuple[Router, Config]:
         )
     conn.commit()
     conn.close()
-    config = Config(admin_token="lay_admin", session_secret="sess_shhh", bootstrap_owner="o:p")
+    config = Config(session_secret="sess_shhh", bootstrap_owner="o:p")
     router = Router()
     add_settings_routes(router, config, db_path)
     return router, config
@@ -51,7 +51,7 @@ def test_config_is_exactly_the_safe_allowlist_and_leaks_no_credential(tmp_path: 
     payload = get_payload(router)
     assert set(payload["config"]) == set(_SAFE_CONFIG)
     assert payload["config"] == safe_config_snapshot(config)
-    for secret in ("admin_token", "session_secret", "bootstrap_owner"):
+    for secret in ("session_secret", "bootstrap_owner"):
         assert secret not in payload["config"]
     for path in ("state_dir", "db_path", "web_root"):
         assert path not in payload["config"]

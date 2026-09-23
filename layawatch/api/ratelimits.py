@@ -53,7 +53,7 @@ def add_ratelimit_routes(router: Router, *, config: Config, db_path: str | Path)
         _reject_unknown_query(request)
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "settings.read")
+            gate(request, conn, db_path, "settings.read")
             payload = _payload(conn, config)
         finally:
             conn.close()
@@ -68,9 +68,7 @@ def add_ratelimit_routes(router: Router, *, config: Config, db_path: str | Path)
             ) from None
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "settings.write", action="ratelimit.updated"
-            )
+            principal = gate(request, conn, db_path, "settings.write", action="ratelimit.updated")
             current = effective_policy(conn, config)
             before = {name: current[name] for name in updates}
             merged = {**current, **updates}
@@ -97,7 +95,7 @@ def add_ratelimit_routes(router: Router, *, config: Config, db_path: str | Path)
     def usage(_request: Request) -> Response:
         conn = connect(db_path)
         try:
-            gate(_request, conn, config, db_path, "settings.read")
+            gate(_request, conn, db_path, "settings.read")
         finally:
             conn.close()
         rows = REGISTRY.usage()
@@ -113,9 +111,7 @@ def add_ratelimit_routes(router: Router, *, config: Config, db_path: str | Path)
         form = _validated_reset(request)
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "settings.write", action="ratelimit.reset"
-            )
+            principal = gate(request, conn, db_path, "settings.write", action="ratelimit.reset")
             if form.get("all"):
                 cleared = REGISTRY.reset(all_=True)
                 target = "all"

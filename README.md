@@ -18,24 +18,59 @@ Design goals, in order:
 
 ## Status
 
-Planning. Nothing here is implemented yet. The deliverable set is:
+Implemented through Phase 7; Phase 8 packaging (container, scripts, release gate) lands with the
+`v0.1.0` tag. The deliverable set:
 
+- `layawatch/` Python package: app (FastAPI app factory), http, store, obs, auth, engine, api
+- `web/` Next.js console, built to a static export and served by the Python process
 - `docs/` product, design and operations documentation
 - `plan/` phased implementation plan, one directory per phase with `plan.md`, `evidence.md`,
   `issues.md`, `decisions.md`, `outcome.md`
-- `web/design/mock.html` the approved UI/UX vision mock (design source of truth)
+- `tests/` pytest suite (`make test`), `scripts/` dev, smoke, budget and operator helpers
 
-## Repository map (target)
+## Quickstart
+
+Three install paths; `docs/operations.md` section 2 is the long form.
+
+**Source (development):**
+
+```bash
+git clone https://github.com/BLANCO-11/LayaWatch.git && cd LayaWatch
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt && pip install fastapi uvicorn httpx
+cd web && npm ci && npm run build && cd ..        # produces web/out
+python -m layawatch                               # serves http://127.0.0.1:8050
+```
+
+**Container:**
+
+```bash
+docker compose up -d                              # ./Dockerfile, volumes for state and models
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8050/healthz   # 200
+```
+
+**systemd:** install `layawatch.service` per `docs/operations.md` section 2.3
+(`sudo cp layawatch.service /etc/systemd/system/ && sudo systemctl daemon-reload &&
+sudo systemctl enable --now layawatch`).
+
+First run on any path: open the console, create the first owner in the setup wizard (or set
+`LAYWATCH_BOOTSTRAP_OWNER`), create an API key, arm key auth, confirm `/healthz` reports
+`auth_enabled: true` (`docs/operations.md` section 3). Backup, restore and upgrade are
+`scripts/backup.sh`, `scripts/restore.sh` and `scripts/upgrade.sh`.
+
+## Repository map
 
 ```
 layawatch/        Python package: app (FastAPI app factory), http, store, obs, auth, engine, api
 web/              Next.js app, built to a static export and served by the Python process
 web/design/       approved mock + design references
-deploy/           Dockerfile, compose.yaml, caddy, systemd units
+Dockerfile        multi-stage image: Node builds web/out, python:3.12-slim serves (non-root)
+docker-compose.yml single-service compose with healthcheck and hardened defaults
+layawatch.service hardened systemd unit (docs/operations.md section 2.3)
 docs/             design language, architecture, observability model, API, security, operations
 plan/             master plan + per-phase plan/evidence/issues/decisions/outcome files
 tests/            pytest suite
-scripts/          dev, smoke and release helpers
+scripts/          dev, smoke, bench, budget, backup/restore/upgrade and e2e helpers
 ```
 
 ## Documentation

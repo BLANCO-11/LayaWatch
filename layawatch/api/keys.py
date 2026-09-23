@@ -7,10 +7,9 @@ once and never stored or logged. Rotation keeps the previous digest valid for a
 five-minute grace window (the 0002 migration's ``prev_*`` columns, checked by
 ``engine/keys.verify_key``); revoke is a soft delete that clears both digests immediately.
 
-The legacy ``/admin/api/keys`` and ``/admin/api/auth`` shims (api/legacy.py) forward onto
-these exact paths, so the body-variant ``DELETE /api/v1/keys`` (id in the JSON body, what
-legacy scripts send) is registered beside the documented ``DELETE /api/v1/keys/{id}``,
-and ``GET /api/v1/keys/auth`` answers the armed state the legacy GET expects.
+The body-variant ``DELETE /api/v1/keys`` (id in the JSON body, the pre-v0.1.0 script shape)
+is registered beside the documented ``DELETE /api/v1/keys/{id}``, and
+``GET /api/v1/keys/auth`` answers the armed state those scripts read.
 
 Every handler runs the shared :func:`layawatch.auth.sessions.gate`: 401 without a
 credential, CSRF for session mutations, role from the shared permission table (viewer
@@ -38,7 +37,6 @@ from layawatch.http.types import HttpError, Request, Response, json_response
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
-    from layawatch.config import Config
     from layawatch.http.router import Router
 
 #: Rotation grace: the previous secret stays valid this long (security.md 3.3).
@@ -49,14 +47,14 @@ _NOTE_ONCE = "store this key now; it is not shown again"
 _LIMIT_FIELDS = ("rate_limit_per_min", "burst")
 
 
-def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> None:
+def add_key_routes(router: Router, *, db_path: str | Path) -> None:
     """Register the section 9/9.1 key endpoints on ``router``."""
 
     def list_keys(request: Request) -> Response:
         _reject_unknown_query(request)
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "keys.list")
+            gate(request, conn, db_path, "keys.list")
             rows = conn.execute(
                 "SELECT id, name, prefix, created_at, last_used, revoked_at,"
                 " request_count, rate_limit_per_min, burst FROM api_keys"
@@ -77,9 +75,7 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
         limits = _limits(payload)
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "keys.write", action="key.created"
-            )
+            principal = gate(request, conn, db_path, "keys.write", action="key.created")
             key_id = secrets.token_hex(6)
             secret = generate_secret()
             now = time.time()
@@ -148,7 +144,7 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
         _reject_unknown_query(request)
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "keys.read_auth")
+            gate(request, conn, db_path, "keys.read_auth")
             enabled = auth_armed(conn)
         finally:
             conn.close()
@@ -162,12 +158,7 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
         conn = connect(db_path)
         try:
             principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "keys.write",
-                action="key.auth_changed",
+                request, conn, db_path, "keys.write", action="key.auth_changed",
                 target="keys.auth",
             )
             if enabled and not _has_active_key(conn):
@@ -203,13 +194,7 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
         conn = connect(db_path)
         try:
             principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "keys.write",
-                action="key.revoked",
-                target=key_id,
+                request, conn, db_path, "keys.write", action="key.revoked", target=key_id
             )
             row = _load(conn, key_id)
             if row["revoked_at"] is None:
@@ -236,13 +221,7 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
         conn = connect(db_path)
         try:
             principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "keys.write",
-                action="key.rotated",
-                target=key_id,
+                request, conn, db_path, "keys.write", action="key.rotated", target=key_id
             )
             row = _load(conn, key_id)
             if row["revoked_at"] is not None:
@@ -296,7 +275,6 @@ def add_key_routes(router: Router, *, config: Config, db_path: str | Path) -> No
             principal = gate(
                 request,
                 conn,
-                config,
                 db_path,
                 "keys.write",
                 action="ratelimit.updated",

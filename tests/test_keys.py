@@ -138,7 +138,7 @@ def test_verify_rejects_a_revoked_key(conn) -> None:
 
 
 def test_verify_accepts_a_legacy_unpeppered_digest(conn) -> None:
-    # Exact legacy/serve.py secret shape: "laya_" + token_hex(24), stored as plain sha256.
+    # Exact pre-v0.1.0 secret shape: "laya_" + token_hex(24), stored as plain sha256.
     legacy_secret = "laya_" + "0123456789abcdef" * 3
     insert_key(conn, "legacy1", legacy_secret, legacy=True)
     # The stored digest ignores the pepper, so any pepper still verifies the legacy plaintext.

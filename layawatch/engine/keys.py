@@ -8,7 +8,7 @@ Verification accepts the two stored formats that can exist in ``api_keys.hash``:
 
 - ``HMAC-SHA256(pepper, secret)`` hex -- new keys, per the column comment and api-reference
   section 9;
-- plain ``SHA256(secret)`` hex -- what ``legacy/serve.py`` wrote into ``api_keys.json``. The
+- plain ``SHA256(secret)`` hex -- what the pre-v0.1.0 server wrote into ``api_keys.json``. The
   import (engine/legacy_state.py) keeps those digests verbatim, so any plaintext that verified
   against the legacy server verifies after import; both comparisons run unconditionally (no
   short-circuit on the first format).

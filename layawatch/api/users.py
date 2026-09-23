@@ -36,20 +36,19 @@ from layawatch.http.types import HttpError, Request, Response, json_response
 from layawatch.store.db import connect
 
 if TYPE_CHECKING:
-    from layawatch.config import Config
     from layawatch.http.router import Router
 
 _PREFIX = "/api/v1/users/"
 
 
-def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> None:
+def add_user_routes(router: Router, *, db_path: str | Path) -> None:
     """Register the section 10 user and session endpoints on ``router``."""
 
     def list_users(request: Request) -> Response:
         _reject_unknown_query(request)
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "users.read")
+            gate(request, conn, db_path, "users.read")
             rows = conn.execute(
                 "SELECT * FROM users ORDER BY created_at, id"
             ).fetchall()
@@ -63,9 +62,7 @@ def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     def create_user(request: Request) -> Response:
         conn = connect(db_path)
         try:
-            principal = gate(
-                request, conn, config, db_path, "users.write", action="user.created"
-            )
+            principal = gate(request, conn, db_path, "users.write", action="user.created")
             email, name, role, password_hash = _validated_create(request)
             created = insert_user(
                 conn,
@@ -110,12 +107,7 @@ def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> N
         conn = connect(db_path)
         try:
             principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "sessions.revoke_all",
-                action="session.revoked_all",
+                request, conn, db_path, "sessions.revoke_all", action="session.revoked_all"
             )
             revoked = revoke_all_sessions(conn, principal.session_id)
             audit(
@@ -137,15 +129,8 @@ def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> N
         action = _intent_action(payload)
         conn = connect(db_path)
         try:
-            principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "users.write",
-                action=action,
-                target=user_id,
-            )
+            principal = gate(request, conn, db_path, "users.write", action=action,
+            target=user_id,)
             target = fetch_user(conn, user_id)
             if target is None:
                 raise _unknown_user(user_id)
@@ -162,15 +147,8 @@ def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     def _delete_user(request: Request, user_id: str) -> Response:
         conn = connect(db_path)
         try:
-            principal = gate(
-                request,
-                conn,
-                config,
-                db_path,
-                "users.write",
-                action="user.deleted",
-                target=user_id,
-            )
+            principal = gate(request, conn, db_path, "users.write", action="user.deleted",
+            target=user_id,)
             target = fetch_user(conn, user_id)
             if target is None:
                 raise _unknown_user(user_id)
@@ -184,7 +162,7 @@ def add_user_routes(router: Router, *, config: Config, db_path: str | Path) -> N
     def _user_sessions(request: Request, user_id: str) -> Response:
         conn = connect(db_path)
         try:
-            gate(request, conn, config, db_path, "sessions.read", target=user_id)
+            gate(request, conn, db_path, "sessions.read", target=user_id)
             if fetch_user(conn, user_id) is None:
                 raise _unknown_user(user_id)
             rows = conn.execute(

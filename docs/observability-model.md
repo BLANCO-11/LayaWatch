@@ -21,7 +21,7 @@ groups by name. Every span records `start_ms` (offset from trace start) and `dur
 | Span | Type | Attributes | Notes |
 |---|---|---|---|
 | `http.receive` | span | `method`, `path`, `remote`, `content_length` | opens the trace |
-| `auth.verify` | span | `scheme` (`api_key`, `admin_token`, `session`, `none`), `key_id`, `ok` | 401/403 on failure |
+| `auth.verify` | span | `scheme` (`api_key`, `session`, `none`), `key_id`, `ok` | 401/403 on failure |
 | `body.parse` | span | `state_bytes`, `question_count`, `model_param`, `lang_param` | 400 on malformed JSON |
 | `lang.detect` | span | `lang`, `confidence` | engine `analyse()` |
 | `route.decide` | span | `model`, `reason`, `typed_workflow` | engine `Router.route()` |

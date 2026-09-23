@@ -228,7 +228,7 @@ def test_bad_action_and_models_are_400_invalid_request(tmp_path) -> None:
 
 
 def test_model_admin_action_body_loads_and_unloads(tmp_path) -> None:
-    """POST /api/v1/models accepts the legacy {action, models} body the section 14 shim maps."""
+    """POST /api/v1/models accepts the pre-v0.1.0 {action, models} admin body shape."""
     events: list[dict] = []
     adapter = FakeAdapter(models=("english", "multilingual"))
     router, adapter, _db_path = build(tmp_path, adapter=adapter, on_change=events.append)

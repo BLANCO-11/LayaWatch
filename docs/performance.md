@@ -11,6 +11,7 @@ Rule of this document: **measure first, then optimize, then prove it with the sa
 | LayaWatch disk at 10k traces | <= 200 MB | `scripts/budget_check.py disk` |
 | Cold start to first served request | <= 3 s (excluding model load) | `scripts/budget_check.py coldstart` |
 | Idle CPU with no clients | < 2 % over 60 s | `scripts/budget_check.py idle-cpu` |
+| Production image delta over `python:3.12-slim` + torch | <= 50 MB | `scripts/budget_check.py image` |
 | Recording overhead on engine latency | <= 3 ms p95 added | `scripts/bench.py overhead` |
 | Trace list query, 10k traces | <= 50 ms p95 | `scripts/bench.py api` |
 | Metrics query, 15 m window | <= 30 ms p95 | `scripts/bench.py api` |
@@ -25,7 +26,8 @@ except where LayaWatch can avoid work (see 4.12 to 4.14).
 - `scripts/bench.py` subcommands: `overhead`, `throughput`, `api`, `static`, `sse`, `all`. Each prints
   a table (p50, p90, p95, p99, max, n) and writes JSON to `bench/results/<timestamp>.json` for
   comparison across phases.
-- `scripts/budget_check.py` asserts the four resource budgets and exits non-zero on failure.
+- `scripts/budget_check.py` asserts every resource budget (`rss`, `disk`, `coldstart`,
+  `idle-cpu`, `image`) and exits non-zero on failure.
 - Both run against a seeded database (`scripts/seed.py --traces 10000 --observations 9`).
 - CI runs `bench.py overhead` and `bench.py api` on every change with loose thresholds (2x budget) to
   catch regressions, and `budget_check.py` at the Phase 8 gate with hard thresholds.

@@ -73,12 +73,6 @@ Invariants enforced in code, not just in the UI:
 - `request_count` and `last_used` are updated in the writer batch, never per request transaction.
 - Arming key auth requires at least one active key; disarming is audited.
 
-### 3.4 Legacy admin token
-
-`LAYA_ADMIN_TOKEN` still works for `/api/v1` mutations when set, for compatibility with existing
-scripts. It is compared with `hmac.compare_digest`, cannot be used to log in to the UI, and its use is
-audited as `actor = legacy-admin-token`. Operations docs recommend removing it after Phase 3.
-
 ## 4. Rate limits
 
 Rate limiting is a managed product feature, specified in full in

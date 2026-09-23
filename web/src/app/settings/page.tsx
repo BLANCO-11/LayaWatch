@@ -1,7 +1,7 @@
 /* Settings view (plan phase-6 tasks 12-16, mock section 08): server facts
  * and effective values, theme preference, retention with the disk estimate,
  * payload capture, rate-limit policy with the live bucket panel,
- * diagnostics and shim counters refreshed on SSE pulse, the danger zone,
+ * diagnostics refreshed on SSE pulse, the danger zone,
  * and the footer link to the Audit view (linked from Settings, no nav
  * group). Every mutation runs through the shared helper and every control
  * is permission-gated with an explained reason. */
@@ -19,7 +19,6 @@ import CaptureCard from "@/components/settings/CaptureCard";
 import RateLimitsCard from "@/components/settings/RateLimitsCard";
 import BucketPanel from "@/components/settings/BucketPanel";
 import DiagnosticsCard from "@/components/settings/DiagnosticsCard";
-import ShimCountersCard from "@/components/settings/ShimCountersCard";
 import DangerZoneCard from "@/components/settings/DangerZoneCard";
 import { useAuth } from "@/components/AuthProvider";
 import { useMutate } from "@/lib/mutation";
@@ -221,14 +220,6 @@ export default function SettingsPage() {
 
           <Card title="Diagnostics" meta="self-observability - refreshes on pulse">
             <DiagnosticsCard meta={meta} />
-          </Card>
-
-          <Card title="Legacy shim counters" meta="D-006">
-            <ShimCountersCard meta={meta} />
-            <p className="lw-hint" style={{ marginTop: 8 }}>
-              Counters show whether anything still calls the legacy /admin endpoints before the
-              shims are removed.
-            </p>
           </Card>
 
           <Card title="Danger zone" variant="flat" meta="destructive - confirm dialogs">

@@ -10,11 +10,10 @@ millisecond precision unless a field name says otherwise.
 |---|---|---|
 | Engine clients | `X-API-Key: lay_...` or `Authorization: Bearer lay_...` | `POST /predict`, `POST /route` |
 | Console (browser) | session cookie `lw_session` (HttpOnly, SameSite=Lax, Secure behind TLS) | all `/api/v1/*` except login and health |
-| Automation | `X-Admin-Token: <LAYA_ADMIN_TOKEN>` (legacy) | `/api/v1/*` mutations while the variable is set |
 | CI | API key with role `viewer` scoped to reads | `GET /api/v1/*` |
 
 Mutations from a browser session require the CSRF header `X-CSRF-Token` matching the `lw_csrf` cookie
-(double submit). Mutations from an API key or the legacy admin token do not.
+(double submit). Mutations from an API key do not.
 
 Status codes: `401` missing or invalid credential, `403` authenticated but not permitted, `429` rate
 limited with `Retry-After`.
@@ -297,16 +296,23 @@ Recorded actions include `auth.login`, `auth.login_failed`, `auth.login_blocked`
 
 ## 14. Legacy compatibility
 
-| Legacy | Behavior in v0.1 | Removal |
-|---|---|---|
-| `GET /admin` | `302` to `/` | Phase 8 |
-| `GET /admin/api/stats` | mapped to `/api/v1/metrics/summary` shape | Phase 8 |
-| `GET /admin/api/logs` | mapped to `/api/v1/logs` | Phase 8 |
-| `GET/POST/DELETE /admin/api/keys` | mapped to `/api/v1/keys` | Phase 8 |
-| `GET/POST /admin/api/auth` | mapped to `/api/v1/keys/auth` | Phase 8 |
-| `GET/POST /admin/api/models` | mapped to `/api/v1/models` | Phase 8 |
-| `api_keys.json` | imported once into SQLite, file renamed `api_keys.json.imported` | after import |
+**Removed in `v0.1.0`:** every `/admin` route (the `GET /admin` redirect and all
+`/admin/api/*` shims) and the `LAYA_ADMIN_TOKEN` / `X-Admin-Token` credential are gone
+(D-006, plan phase-8 task 9). Removed paths answer the standard `404 not_found` envelope and
+the header authenticates nothing. Migration for old clients:
 
-Shim responses carry `Deprecation: true` and `Link: </api/v1/...>; rel="successor-version"`. The
-shims are deleted at Phase 8; until then every shim call increments a counter shown in Settings so the
-operator can see whether anything still depends on them.
+| Old (pre-v0.1.0) | Use instead |
+|---|---|
+| `GET /admin` | the console at `/` (session login, section 1) |
+| `GET /admin/api/stats` | `GET /api/v1/metrics/summary` (section 6) |
+| `GET /admin/api/logs` | `GET /api/v1/logs` (section 7) |
+| `GET/POST/DELETE /admin/api/keys` | `GET/POST/DELETE /api/v1/keys` (section 9) |
+| `GET/POST /admin/api/auth` | `GET/POST /api/v1/keys/auth` (section 9) |
+| `GET/POST /admin/api/models` | `GET/POST /api/v1/models` (section 11) |
+| `X-Admin-Token` header | a console session cookie or an API key (section 1) |
+
+**The `api_keys.json` import ends after `v0.1.0`.** v0.1.0 is the one release of
+compatibility: on first start the file is imported once into SQLite and renamed
+`api_keys.json.imported` (a `DeprecationWarning` fires while it runs), the module is deleted
+in the first commit of the next cycle, and `scripts/upgrade.sh` refuses to run while a raw
+`api_keys.json` is present so no operator silently loses keys.

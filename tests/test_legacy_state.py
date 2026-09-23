@@ -17,7 +17,7 @@ from layawatch.store.db import connect, migrate
 
 REAL_LEGACY_FILE = Path(__file__).resolve().parent.parent / "api_keys.json"
 
-# Exact shape legacy/serve.py writes: "laya_" + token_hex(24), prefix = first 12 chars,
+# Exact shape the pre-v0.1.0 server wrote: "laya_" + token_hex(24), prefix = first 12 chars,
 # digest = unpeppered sha256 hex, timestamps = local "%Y-%m-%d %H:%M:%S" strings.
 LEGACY_SECRET = "laya_" + "ab12cd34ef56" * 4
 LEGACY_ID = "deadbeef0001"
@@ -127,6 +127,14 @@ def test_absent_file_is_a_silent_zero(tmp_path, conn) -> None:
     assert import_once(conn, tmp_path) == 0
     assert ring_entries() == []  # a machine that never had legacy state logs nothing
     assert conn.execute("SELECT count(*) FROM settings").fetchone()[0] == 0
+
+
+def test_import_emits_a_deprecation_warning(tmp_path, conn) -> None:
+    """Plan phase-8 task 10: v0.1.0 is the one release of compatibility for this import."""
+    write_legacy(tmp_path, [LEGACY_ENTRY])
+    with pytest.warns(DeprecationWarning, match="api_keys.json import is deprecated"):
+        assert import_once(conn, tmp_path) == 1
+    assert any("deprecated" in message for message in warnings())
 
 
 def test_rename_failure_keeps_rows_and_the_next_call_heals(tmp_path, conn, monkeypatch) -> None:

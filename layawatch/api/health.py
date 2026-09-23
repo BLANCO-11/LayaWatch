@@ -72,7 +72,7 @@ def add_root_route(router: Router, web_root: Path) -> None:
 
 
 #: Config keys exposed by ``/api/v1/meta``: never a path (state_dir, db_path, web_root) and
-#: never a credential (admin_token, session_secret, bootstrap_owner).
+#: never a credential (session_secret, bootstrap_owner).
 _SAFE_CONFIG: tuple[str, ...] = (
     "bind",
     "port",
@@ -109,14 +109,13 @@ def add_meta_routes(
     started_at: float,
     counters: Callable[[], dict],
     sse_clients: Callable[[], int],
-    deprecations: Callable[[], dict],
 ) -> None:
     """Register ``GET /api/v1/meta``: version, uptime, the safe config snapshot and counters.
 
     ``started_at`` is epoch seconds from process start; ``uptime_s`` is recomputed per
     request. ``config`` is reduced to the :data:`_SAFE_CONFIG` allowlist so no path or
-    secret can leak, ``counters`` (the writer snapshot) spreads at the top level beside
-    them, and ``deprecation`` carries the live legacy-shim counts.
+    secret can leak, and ``counters`` (the writer snapshot) spreads at the top level
+    beside them.
     """
 
     def meta(_request: Request) -> Response:
@@ -129,7 +128,6 @@ def add_meta_routes(
                 "rss_mb": _rss_mb(),
                 "sse_clients": sse_clients(),
                 "config": safe_config_snapshot(config),
-                "deprecation": deprecations(),
                 **counters(),
             }
         )

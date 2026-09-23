@@ -6,7 +6,7 @@ protocol and ``FakeAdapter``; Phase 1 adds ``RealAdapter``, the instrumented wra
 real ``laya.Router`` (see its class docstring).
 
 Response shapes follow ``docs/api-reference.md`` section 4 and the real router as exercised by
-``scripts/smoke_laya.py`` and ``legacy/serve.py``:
+``scripts/smoke_laya.py`` and the pre-v0.1.0 legacy server:
 
 - ``FakeAdapter.predict`` (the API-facing shape the HTTP layer serves) returns ``{"answers":
   {question: {"choice", "confidence", "noul"}, ...}, "model", "route_reason", "lang"}`` -- answers
@@ -250,7 +250,7 @@ class FakeAdapter:
 # ------------------------------------------------------------------- real engine
 # Memory floor per checkpoint: MemAvailable must cover GB_PER_CHECKPOINT for every checkpoint a
 # load() would newly build. 1.5 GiB = the ~1.3 GB one checkpoint actually costs in RSS
-# (legacy/serve.py measures "~1.3 GB RAM saved" by dropping multilingual) plus ~0.2 GiB of
+# (the pre-v0.1.0 server measured "~1.3 GB RAM saved" by dropping multilingual) plus ~0.2 GiB of
 # headroom for tokenizer and activation buffers; laya's three checkpoints are "~1.16B parameters"
 # together (laya/router.py docstring), i.e. ~1.5 GB of fp32 weights each. Checked against
 # MemAvailable (what the kernel can still hand out), not MemTotal.
@@ -265,7 +265,7 @@ class EnglishOnlyError(ValueError):
     """An english-only deployment refused the state or a multilingual override (legacy 422).
 
     Subclasses ValueError so a handler carrying the legacy ValueError -> 400 mapping still fails
-    closed; catch this class first to answer 422 the way legacy/serve.py did. ``detection`` is the
+    closed; catch this class first to answer 422 the way the pre-v0.1.0 server did. ``detection`` is the
     analyse() subset legacy put in the 422 body (None when an override triggered the refusal).
     """
 
@@ -397,7 +397,7 @@ _WARMUP_QUESTIONS = {
 
 
 class RealAdapter:
-    """EngineAdapter over the real ``laya.Router``, constructed exactly as ``legacy/serve.py`` did.
+    """EngineAdapter over the real ``laya.Router``, constructed exactly as the legacy server did.
 
     Nothing touches laya or torch until the first predict/route/load call (or, on the
     production path where no engine is injected, until the startup worker started in
@@ -733,7 +733,7 @@ class RealAdapter:
         return decision, lang_code
 
     def _refuse_when_english_only(self, det: dict, model: str | None, engine: Any) -> None:
-        """Replicate legacy/serve.py's pre-engine 422 checks under LAYA_ENGLISH_ONLY."""
+        """Replicate the legacy server's pre-engine 422 checks under LAYA_ENGLISH_ONLY."""
         if not self._english_only:
             return
         if not det.get("is_english"):

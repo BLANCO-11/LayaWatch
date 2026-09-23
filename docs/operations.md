@@ -12,6 +12,7 @@ Audience: whoever runs LayaWatch on a machine they own.
 | Disk | 4 GB | model cache ~2.3 GB plus <= 200 MB of state |
 | OS | Linux (tested), macOS (dev) | systemd or Docker for supervision |
 | Python | 3.12 | matches the engine's supported range |
+| sqlite3 | CLI on `PATH`, any Python 3.12+ | backup/restore scripts use `sqlite3` or the `python -m sqlite3` fallback |
 | Docker | 24+ | only for the container path |
 
 ## 2. Install paths
@@ -36,14 +37,34 @@ and `/` returns build instructions.
 ### 2.2 Container (recommended for hosting)
 
 ```bash
-docker compose up -d            # deploy/compose.yaml, single service, volume ./data:/data
+git clone https://github.com/BLANCO-11/LayaWatch.git
+cd LayaWatch
+docker compose up -d                # builds ./Dockerfile, starts the layawatch service
 docker compose logs -f layawatch
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8050/healthz   # 200
 ```
 
-The image is built in two stages (Node builds the UI, Python serves everything) and runs as a
-non-root user with a read-only root filesystem; only `/data` and the model cache are writable.
+The image is built in two stages (Node builds the UI, Python serves everything), runs as a
+non-root user (uid 10001) with a read-only root filesystem, and keeps its state in the named
+volumes `layawatch-data` (`/data`: `state.sqlite3`, `secret.key`) and `layawatch-models`
+(`/models`: checkpoint cache). Every environment key lives inline in `docker-compose.yml` with
+its `docs/architecture.md` section 6 default; the compose file binds `8050:8050`, so switch the
+published port to `127.0.0.1:8050:8050` when the host is not behind a proxy.
 
 ### 2.3 systemd (no container)
+
+The hardened unit ships as [`layawatch.service`](../layawatch.service) (transcribed from this
+section; plan phase-8 task 6):
+
+```bash
+sudo cp layawatch.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now layawatch
+journalctl -u layawatch -f
+```
+
+Adjust `WorkingDirectory`, `ExecStart` and `Environment=LAYA_STATE_DIR` if you install outside
+`/opt/layawatch` and `/var/lib/layawatch`. The unit text:
 
 ```ini
 # /etc/systemd/system/layawatch.service
@@ -71,13 +92,19 @@ WantedBy=multi-user.target
 
 ## 3. First run
 
-1. Start the process. On an empty state directory it creates `state.sqlite3`, `secret.key` (0600) and
-   applies migrations.
-2. Open `http://127.0.0.1:8050`. With no users yet, the setup wizard creates the first owner
-   (email, name, password). Alternatively set `LAYWATCH_BOOTSTRAP_OWNER=you@example.com:<password>`
-   for unattended provisioning; it is ignored once a user exists.
+1. Start the process. On an empty state directory it creates `state.sqlite3` and `secret.key`
+   (0600) under `LAYA_STATE_DIR`, applies migrations, and logs
+   `layawatch starting on http://127.0.0.1:8050`.
+2. Open `http://127.0.0.1:8050`. With no users yet, the setup wizard (or
+   `POST /api/v1/auth/setup`) creates the first owner (email, name, password). Alternatively set
+   `LAYWATCH_BOOTSTRAP_OWNER=you@example.com:<password>` for unattended provisioning; it is
+   ignored once a user exists.
 3. Create an API key for your client, copy it once, then arm key auth for `/predict` and `/route`.
-4. Confirm `/healthz` reports the preloaded checkpoints and `auth_enabled: true`.
+4. Confirm `GET /healthz` reports `status: ok`, the loaded `models`, and `auth_enabled: true`.
+5. Optional full-path check against a running instance:
+   `python scripts/e2e_smoke.py --base-url http://127.0.0.1:8050` (task 13) walks login, key
+   creation, predict, trace visibility, model load/unload and logout, and exits non-zero on the
+   first failure.
 
 ## 4. Configuration
 
@@ -99,33 +126,53 @@ UI states which values came from the environment (locked) versus the database (e
 ## 5. Backups and restore
 
 ```bash
-# consistent online backup, safe while running
-sqlite3 /var/lib/layawatch/state.sqlite3 "VACUUM INTO '/backup/layawatch-$(date +%F).sqlite3'"
+# consistent online backup, safe while the service is up (task 7)
+scripts/backup.sh                       # STATE_DIR from LAYA_STATE_DIR or /var/lib/layawatch,
+                                        # backups to LAYA_BACKUP_DIR or /backup
 
-# restore
-systemctl stop layawatch
-cp /backup/layawatch-2026-09-22.sqlite3 /var/lib/layawatch/state.sqlite3
-rm -f /var/lib/layawatch/state.sqlite3-wal /var/lib/layawatch/state.sqlite3-shm
-systemctl start layawatch
+# inside the container
+docker compose exec layawatch scripts/backup.sh /data /backups
+
+# restore on a clean machine (task 8): verifies BEFORE touching the live state
+scripts/restore.sh /backup/layawatch-2026-09-22-120000.sqlite3
 ```
 
-`secret.key` must be backed up with the database (without it, sessions and API key hashes cannot be
-verified). A `scripts/backup.sh` helper wraps the commands, prunes backups older than 14 days, and
-verifies the copy with `PRAGMA integrity_check`.
+What the scripts guarantee:
 
-Do not copy a live `-wal` file. Do not back up the model cache unless you need offline provisioning.
+- `backup.sh` uses only `VACUUM INTO` (a live `-wal` file is never copied; passing a `-wal` or
+  `-shm` path is refused), copies `secret.key` beside the database as
+  `layawatch-<stamp>.secret.key`, runs `PRAGMA integrity_check` on the copy and fails unless it
+  is `ok`, and prunes backups older than 14 days.
+- `restore.sh` stops the service (systemd unit or compose project, `LAYA_RESTORE_SERVICE=none`
+  to skip), verifies the backup with `PRAGMA integrity_check` *before* replacing anything,
+  replaces `state.sqlite3` (and `secret.key` when the backup carries one), drops stale
+  `-wal`/`-shm` files, re-checks integrity, and restarts.
+- Both scripts prefer the `sqlite3` CLI and fall back to `python -m sqlite3` (Python 3.12+).
+
+Do not copy a live `-wal` file by hand. Do not back up the model cache unless you need offline
+provisioning.
 
 ## 6. Upgrade
 
 ```bash
-git pull && cd web && npm ci && npm run build && cd ..
-. .venv/bin/activate && python -m layawatch --migrate-only   # applies migrations, exits
-systemctl restart layawatch
+scripts/upgrade.sh            # auto-detects the systemd/source path or the compose path
 ```
+
+What it does (task 8, every step printed):
+
+1. **Preflight (task 10):** refuses to run while a raw `api_keys.json` (not
+   `api_keys.json.imported`) sits in `LAYA_STATE_DIR`, with instructions - the legacy import
+   ships for one release only, so upgrading past it unrepaired would drop keys.
+2. Source path: `git pull`, `cd web && npm ci && npm run build`, then
+   `python -m layawatch --migrate-only`, then `systemctl restart layawatch` (when the unit
+   exists; otherwise restart your supervisor).
+3. Compose path: `docker compose build layawatch`,
+   `docker compose run --rm layawatch python -m layawatch --migrate-only`, then
+   `docker compose up -d --build`.
 
 Migrations are forward-only and idempotent. The process refuses to start when the database schema is
 newer than the code (`schema_migrations` check), with a message telling you to upgrade the code rather
-than downgrade the data.
+than downgrade the data. Roll back with `scripts/restore.sh` (section 5) plus the previous ref.
 
 ## 7. Monitoring LayaWatch
 
@@ -143,15 +190,19 @@ Alerting guidance: alert on `/healthz` failures, on `obs_dropped_total` increasi
 ## 8. Resource budgets (tracked from Phase 7, verified at the Phase 8 release gate)
 
 ```bash
-# RSS overhead excluding model weights
-python scripts/budget_check.py rss        # asserts <= 120 MB after warmup
-python scripts/budget_check.py disk       # loads 10k synthetic traces, asserts <= 200 MB
-python scripts/budget_check.py coldstart  # asserts <= 3 s to first served request
-python scripts/budget_check.py idle-cpu   # asserts < 2 % over 60 s with no clients
+python scripts/budget_check.py rss        # <= 120 MB after warmup
+python scripts/budget_check.py disk       # state dir at 10k traces, <= 200 MB
+python scripts/budget_check.py coldstart  # <= 3 s to first served request
+python scripts/budget_check.py idle-cpu   # < 2 % over 60 s with no clients
+python scripts/budget_check.py image      # runtime image delta over python:3.12-slim + torch,
+                                          # <= 50 MB (baseline, delta and verdict printed;
+                                          # needs the built image and docker locally)
+python scripts/budget_check.py all        # every subcommand above, stops at the first breach
 ```
 
-If a budget fails, the release does not ship. Tuning order: lower `LAYWATCH_RING_TRACES`, raise the
-write batch size, lower `LAYWATCH_RETENTION_TRACES`, then consider `LAYA_MODELS=english`.
+Every run writes `bench/results/budget-<name>-<stamp>.json`; `--json` prints a machine-readable
+array. If a budget fails, the release does not ship. Tuning order: lower `LAYWATCH_RING_TRACES`,
+raise the write batch size, lower `LAYWATCH_RETENTION_TRACES`, then consider `LAYA_MODELS=english`.
 
 ## 9. Troubleshooting
 

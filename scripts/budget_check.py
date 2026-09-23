@@ -1,17 +1,22 @@
-"""Resource budget gate for LayaWatch: ``rss``, ``disk``, ``coldstart``, ``idle-cpu``, ``all``.
+"""Resource budget gate for LayaWatch: ``rss``, ``disk``, ``coldstart``, ``idle-cpu``,
+``image``, ``all``.
 
-Budgets and the harness contract come from ``docs/performance.md`` sections 1 and 2::
+Budgets and the harness contract come from ``docs/performance.md`` sections 1 and 2 and the
+resource budget table in ``plan/README.md`` section 4::
 
     rss        running server RSS (no model weights)      <= 120 MB
     disk       state directory size (LAYA_STATE_DIR)      <= 200 MB
     coldstart  launch to first 200 on GET /healthz        <= 3000 ms
     idle-cpu   server CPU% with no clients over 60 s      <  2 %
+    image      runtime image delta over                   <= 50 MB
+               python:3.12-slim + torch
 
 Usage::
 
     .venv/bin/python scripts/budget_check.py rss
     LAYA_STATE_DIR=/tmp/lw-bench .venv/bin/python scripts/budget_check.py all
     .venv/bin/python scripts/budget_check.py disk --json
+    .venv/bin/python scripts/budget_check.py image
 
 Every run prints one table row per budget (``name value budget PASS/FAIL``) and writes the same
 row to ``bench/results/budget-<name>-<timestamp>.json`` for cross-phase comparison; ``--json``
@@ -21,7 +26,8 @@ and stops at the first breach.
 Exit codes: 0 when every checked budget passes, 1 on a breach or an impossible measurement, 2 on
 usage errors.
 
-All four measurements read ONE database: ``LAYA_STATE_DIR`` (default ``.``, matching
+The state-reading measurements (``rss``, ``disk``, ``coldstart``, ``idle-cpu``) all read ONE
+database: ``LAYA_STATE_DIR`` (default ``.``, matching
 ``layawatch.config.Config``), the same directory ``scripts/seed.py`` seeds and ``scripts/bench.py``
 targets. The ``rss``, ``coldstart`` and ``idle-cpu`` measurements launch a throwaway child on
 ``LAYA_PORT=8099`` against that state directory and SIGTERM it in a ``finally`` block; child
@@ -31,8 +37,12 @@ the launch command nulls ``sys.modules["laya"]`` before ``layawatch/__main__.py`
 ``device=fake``) and no checkpoint loads during a measurement (P1-I3 warns against parallel
 engine loads; the RSS budget excludes model weights). ``disk`` counts the same
 ``LAYA_STATE_DIR`` and never counts the Hugging Face model cache, even when a deployment places
-that cache inside the state directory. An ``image`` subcommand is deliberately absent; a later
-phase adds it.
+that cache inside the state directory. ``image`` is the only measurement that never touches the
+state directory: it inspects the local runtime image (``LW_IMAGE``, default ``layawatch:0.1.0``)
+and ``python:3.12-slim`` with ``docker image inspect``, probes the runtime image once with
+``docker run --network none`` for the bytes of torch it ships (0 when the optional engine wheels
+are absent, per the Dockerfile header), and asserts the delta. Docker or the images missing is an
+impossible measurement (exit 1) carrying the exact build or pull command.
 """
 from __future__ import annotations
 
@@ -62,12 +72,24 @@ RSS_BUDGET_MB = 120.0
 DISK_BUDGET_MB = 200.0
 COLDSTART_BUDGET_MS = 3000.0
 IDLE_CPU_BUDGET_PCT = 2.0  # strict "less than" per docs/performance.md section 1
+IMAGE_BUDGET_MB = 50.0  # delta over python:3.12-slim + torch (plan/README.md section 4)
+SLIM_BASELINE_IMAGE = "python:3.12-slim"
+RUNTIME_IMAGE_ENV = "LW_IMAGE"
+RUNTIME_IMAGE_DEFAULT = "layawatch:0.1.0"  # the tag docker-compose.yml pins
+#: In-image torch probe: total bytes of the torch package, or 0 when it is not installed.
+_TORCH_PROBE = (
+    "import importlib.util, os;"
+    "s = importlib.util.find_spec('torch');"
+    "r = None if s is None else os.path.dirname(s.origin);"
+    "print(0 if r is None else sum(os.path.getsize(os.path.join(d, f))"
+    " for d, _, fs in os.walk(r) for f in fs))"
+)
 IDLE_WINDOW_S = 60.0
 IDLE_SAMPLE_S = 5.0
 STARTUP_TIMEOUT_S = 30.0
 POLL_INTERVAL_S = 0.01
 WARMUP_SETTLE_S = 0.5
-_COMMANDS = ("rss", "disk", "coldstart", "idle-cpu")
+_COMMANDS = ("rss", "disk", "coldstart", "idle-cpu", "image")
 _HEADER = f"{'name':<10}{'value':>12}{'budget':>10}  result"
 
 
@@ -367,11 +389,82 @@ def _measure_idle_cpu() -> Row:
     return Row("idle-cpu", pct, IDLE_CPU_BUDGET_PCT, "%", pct < IDLE_CPU_BUDGET_PCT)
 
 
+def _docker_size(ref: str) -> int:
+    """Local image size in bytes; missing docker or image is an impossible measurement."""
+    try:
+        proc = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{.Size}}", ref],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except FileNotFoundError as exc:
+        raise HarnessError("docker is not installed; run `docker --version` first") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HarnessError(f"`docker image inspect {ref}` timed out") from exc
+    if proc.returncode != 0:
+        hint = (
+            f"docker pull {ref}"
+            if ref == SLIM_BASELINE_IMAGE
+            else f"docker build -t {ref} ."
+        )
+        raise HarnessError(f"image {ref} is not in the local daemon; run `{hint}`")
+    try:
+        return int(proc.stdout.strip())
+    except ValueError as exc:
+        raise HarnessError(
+            f"unexpected `docker image inspect {ref}` output: {proc.stdout.strip()!r}"
+        ) from exc
+
+
+def _torch_bytes_in_image(ref: str) -> int:
+    """Bytes of the torch package inside ``ref``; 0 when the optional engine wheels are absent."""
+    try:
+        proc = subprocess.run(
+            ["docker", "run", "--rm", "--network", "none", ref, "python", "-c", _TORCH_PROBE],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except FileNotFoundError as exc:
+        raise HarnessError("docker is not installed; run `docker --version` first") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HarnessError(f"`docker run {ref}` torch probe timed out") from exc
+    if proc.returncode != 0:
+        tail = proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else ""
+        raise HarnessError(f"torch probe failed in {ref} (exit {proc.returncode}): {tail}")
+    try:
+        return int(proc.stdout.strip())
+    except ValueError as exc:
+        raise HarnessError(f"unexpected torch probe output from {ref}: {proc.stdout!r}") from exc
+
+
+def _measure_image() -> Row:
+    """Runtime image delta over ``python:3.12-slim`` + torch, printed as baseline, delta, verdict."""
+    app_ref = os.environ.get(RUNTIME_IMAGE_ENV) or RUNTIME_IMAGE_DEFAULT
+    app = _docker_size(app_ref)
+    slim = _docker_size(SLIM_BASELINE_IMAGE)
+    torch_bytes = _torch_bytes_in_image(app_ref)
+    delta_mb = (app - slim - torch_bytes) / (1024 * 1024)
+    passed = delta_mb <= IMAGE_BUDGET_MB
+    print(
+        "budget_check: baseline "
+        f"{(slim + torch_bytes) / (1024 * 1024):.1f} MB"
+        f" (python:3.12-slim {slim / (1024 * 1024):.1f} MB + torch"
+        f" {torch_bytes / (1024 * 1024):.1f} MB); image"
+        f" {app / (1024 * 1024):.1f} MB ({app_ref});"
+        f" delta {delta_mb:.1f} MB; verdict {'PASS' if passed else 'FAIL'}",
+        file=sys.stderr,
+    )
+    return Row("image", delta_mb, IMAGE_BUDGET_MB, "MB", passed)
+
+
 _MEASURES = {
     "rss": _measure_rss,
     "disk": _measure_disk,
     "coldstart": _measure_coldstart,
     "idle-cpu": _measure_idle_cpu,
+    "image": _measure_image,
 }
 
 

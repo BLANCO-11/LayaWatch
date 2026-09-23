@@ -49,7 +49,6 @@ class Config:
     models: list[str] = field(default_factory=lambda: list(_DEFAULT_MODELS))
     device: str = "auto"
     english_only: bool = False
-    admin_token: str | None = None
     session_secret: str | None = None
     session_ttl: int = 2592000
     trace_sample: float = 1.0
@@ -166,7 +165,6 @@ class Config:
         models = parse_models("LAYA_MODELS", "models")
         device = parse_str("LAYA_DEVICE", "device")
         english_only = parse_bool("LAYA_ENGLISH_ONLY", "english_only")
-        admin_token = parse_opt("LAYA_ADMIN_TOKEN", "admin_token")
         session_secret = parse_opt("LAYWATCH_SESSION_SECRET", "session_secret")
         session_ttl = parse_int("LAYWATCH_SESSION_TTL", "session_ttl")
         trace_sample = parse_float("LAYWATCH_TRACE_SAMPLE", "trace_sample")
@@ -222,7 +220,6 @@ class Config:
             models=models,
             device=device,
             english_only=english_only,
-            admin_token=admin_token,
             session_secret=session_secret,
             session_ttl=session_ttl,
             trace_sample=trace_sample,

@@ -1,8 +1,8 @@
 """One-time import of the legacy api_keys.json into SQLite (api-reference.md section 14).
 
-The file legacy/serve.py maintained is ``{"enabled": bool, "keys": [{id, name, prefix, sha256,
-created, last_used}]}``: digests are plain SHA-256 of the plaintext, prefixes are the first 12
-chars of the secret, timestamps are local ``%Y-%m-%d %H:%M:%S`` strings. Import:
+The file the pre-LayaWatch server maintained is ``{"enabled": bool, "keys": [{id, name, prefix,
+sha256, created, last_used}]}``: digests are plain SHA-256 of the plaintext, prefixes are the first
+12 chars of the secret, timestamps are local ``%Y-%m-%d %H:%M:%S`` strings. Import:
 
 - keeps each digest verbatim (engine/keys.py verify_key accepts it alongside the peppered HMAC,
   so every plaintext that verified against the legacy server verifies after import);
@@ -11,6 +11,12 @@ chars of the secret, timestamps are local ``%Y-%m-%d %H:%M:%S`` strings. Import:
 - converts timestamps to epoch seconds with time.mktime, the inverse of legacy's time.strftime;
 - writes the enabled flag to the ``keys.auth`` settings row;
 - renames the file to api_keys.json.imported only after the transaction commits.
+
+Deprecation window (plan phase-8 task 10): this import is the one release of compatibility
+shipped with v0.1.0. When it fires it emits a ``DeprecationWarning`` and a log line; the
+module is deleted in the first commit after v0.1.0, so operators must run this release once
+against a raw ``api_keys.json`` (or run ``scripts/upgrade.sh``, which refuses to proceed
+while one is present) before the path disappears.
 
 Idempotency and failure handling: a missing file returns 0, logging an info line when
 api_keys.json.imported already exists (the second call after a successful import). A malformed
@@ -25,6 +31,7 @@ import json
 import os
 import sqlite3
 import time
+import warnings
 from pathlib import Path
 
 from layawatch.engine.keys import AUTH_SETTINGS_KEY
@@ -60,6 +67,13 @@ def import_once(conn: sqlite3.Connection, state_dir: str | os.PathLike[str]) -> 
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         _log.warning(f"cannot import {_STATE_NAME}: {exc}; file left in place")
         return 0
+
+    deprecated = (
+        f"the {_STATE_NAME} import is deprecated; v0.1.0 is its one release of"
+        " compatibility and the module is removed immediately after v0.1.0"
+    )
+    warnings.warn(deprecated, DeprecationWarning, stacklevel=2)
+    _log.warning(deprecated)
 
     now = time.time()
     rows = _key_rows(keys, now)
