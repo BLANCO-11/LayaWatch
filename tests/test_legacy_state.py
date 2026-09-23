@@ -16,6 +16,10 @@ from layawatch.log import ring_clear, ring_entries
 from layawatch.store.db import connect, migrate
 
 REAL_LEGACY_FILE = Path(__file__).resolve().parent.parent / "api_keys.json"
+# The live deployment already ran the one-time import, which renamed the real file.
+# The rename preserves bytes verbatim (asserted below), so the .imported artifact holds
+# the exact pre-import content and reconstructs the file when the pre-import name is gone.
+REAL_IMPORTED_FILE = REAL_LEGACY_FILE.with_name("api_keys.json.imported")
 
 # Exact shape the pre-v0.1.0 server wrote: "laya_" + token_hex(24), prefix = first 12 chars,
 # digest = unpeppered sha256 hex, timestamps = local "%Y-%m-%d %H:%M:%S" strings.
@@ -57,8 +61,20 @@ def warnings() -> list[str]:
 
 
 def test_real_repo_file_imports_zero_keys_and_renames(tmp_path, conn) -> None:
-    original = json.loads(REAL_LEGACY_FILE.read_text())
-    shutil.copy(REAL_LEGACY_FILE, tmp_path / "api_keys.json")
+    # Source the real bytes: the pre-import file itself when present, else the live
+    # deployment's .imported rename (byte-identical by the verbatim-copy contract this
+    # test asserts). Stage them under the pre-import name; import_once must import zero
+    # keys and rename them - both halves of the contract stay directly observable. With
+    # no real artifact at all the real-file observation is impossible: skip with reason
+    # rather than fabricate a "real" file.
+    if REAL_LEGACY_FILE.exists():
+        source = REAL_LEGACY_FILE
+    elif REAL_IMPORTED_FILE.exists():
+        source = REAL_IMPORTED_FILE
+    else:
+        pytest.skip("neither api_keys.json nor its api_keys.json.imported rename is present")
+    original = json.loads(source.read_text())
+    shutil.copy(source, tmp_path / "api_keys.json")
     ring_clear()
 
     assert import_once(conn, tmp_path) == 0
