@@ -37,6 +37,20 @@ class Router:
         """Register ``handler`` for ``method`` on ``pattern`` (exact path or trailing-``*``)."""
         self._methods_for(pattern)[method.upper()] = handler
 
+    def routes(self) -> list[tuple[str, str]]:
+        """Every registered ``(method, pattern)`` pair, sorted - the API surface as built.
+
+        ``api/openapi.py`` diffs its operation table against this so a new route cannot go
+        undocumented silently.
+        """
+        pairs = [
+            (method, pattern)
+            for table in (self._exact, self._prefixes)
+            for pattern, methods in table.items()
+            for method in methods
+        ]
+        return sorted(pairs, key=lambda pair: (pair[1], pair[0]))
+
     def dispatch(self, request: Request) -> Response:
         """Route ``request``. Never raises; every response carries ``X-Request-Id``, and only
         statuses other than 204/304 carry ``Content-Length``."""

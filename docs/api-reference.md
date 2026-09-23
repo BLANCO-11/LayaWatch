@@ -18,6 +18,18 @@ Mutations from a browser session require the CSRF header `X-CSRF-Token` matching
 Status codes: `401` missing or invalid credential, `403` authenticated but not permitted, `429` rate
 limited with `Retry-After`.
 
+**Enforcement today.** The table above is the intended contract; what the code enforces is
+narrower. `gate()` (`layawatch/auth/sessions.py`) is the only credential check inside handlers,
+and it runs on: every key, user, session, settings, ratelimit, audit and playground endpoint,
+`POST /api/v1/traces/{id}/scores`, `POST /api/v1/traces/{id}/tags`, `DELETE /api/v1/traces` and
+the auth endpoints that call it. `http/middleware.enforce_browser_session` validates a session
+cookie **only when one is present** and otherwise passes the request through, so the operations
+that never call `gate()` - `GET /`, `/healthz`, `/api/v1/meta`, the trace, metrics, log and model
+reads, `DELETE /api/v1/traces/{id}`, `POST /api/v1/models*` and `GET /api/v1/stream` - are served
+without a credential. `POST /predict` and `POST /route` verify keys only while key auth is armed.
+`GET /api/v1/logs/export` is listed as owner/admin above but is not gated yet. The generated
+schema (section 15) marks each operation's real requirement.
+
 ## 2. Conventions
 
 - **Error envelope**
@@ -316,3 +328,26 @@ compatibility: on first start the file is imported once into SQLite and renamed
 `api_keys.json.imported` (a `DeprecationWarning` fires while it runs), the module is deleted
 in the first commit of the next cycle, and `scripts/upgrade.sh` refuses to run while a raw
 `api_keys.json` is present so no operator silently loses keys.
+
+## 15. Interactive schema (Swagger UI)
+
+The full surface is served as OpenAPI 3.1 by the app itself:
+
+| Where | What |
+|---|---|
+| `/api/docs` | Swagger UI, same origin, no credential to open |
+| `/api/openapi.json` | the document Swagger renders |
+
+`layawatch/api/openapi.py` owns the document. It is built from a declarative table of
+operations, one per route the router registers, and `create_app` diffs that table against
+the live router table at startup - a registered route the table misses is logged as
+`openapi: N route(s) undocumented: ...` instead of disappearing silently. Each operation
+carries its real query vocabulary, request body, response shape, error codes and security
+requirement, so the UI doubles as the contract: the code is authoritative and the document
+follows it.
+
+Security is per operation and mirrors the handlers: operations gated by `gate()` show the
+session cookie or the API key, mutating session calls additionally require the
+`X-CSRF-Token` echo, and the engine endpoints show the API key alone (verified only while
+key auth is armed). Operations whose handlers never call `gate()` are marked "no credential
+is enforced" - see the enforcement note in section 1.

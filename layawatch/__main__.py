@@ -241,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     conn.close()
 
     log.info(f"layawatch starting on http://{cfg.bind}:{cfg.port} (web_root={cfg.web_root})")
-    app = create_app(dispatch, max_body_bytes=cfg.max_body_bytes)
+    app = create_app(dispatch, router=router, max_body_bytes=cfg.max_body_bytes)
     try:
         run(cfg, app)
     finally:

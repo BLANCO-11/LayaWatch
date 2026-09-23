@@ -230,9 +230,34 @@ async def _read_body(
     return b"".join(parts) if len(parts) > 1 else parts[0]
 
 
-def create_app(dispatch: Any, *, max_body_bytes: int = 4194304) -> FastAPI:
-    """Build the FastAPI app whose single catch-all route delegates to ``dispatch``."""
+def create_app(
+    dispatch: Any, *, router: Any = None, max_body_bytes: int = 4194304
+) -> FastAPI:
+    """Build the FastAPI app whose single catch-all route delegates to ``dispatch``.
+
+    ``router`` (the http layer's :class:`~layawatch.http.router.Router`, already fully
+    populated when this is called) supplies the real OpenAPI document: the catch-all route
+    means FastAPI's own schema would describe ``/{path}`` and nothing else, so
+    ``api/openapi.py`` renders the actual surface instead, served at
+    ``/api/openapi.json`` and rendered by Swagger UI at ``/api/docs``. Routes the document
+    does not cover are logged, never silently dropped.
+    """
     app = FastAPI(docs_url="/api/docs", openapi_url="/api/openapi.json")
+    if router is not None:
+        from layawatch.api.openapi import build, undocumented
+
+        # FastAPI's documented extension hook: the docs route and /api/openapi.json both
+        # call ``app.openapi()``. Assigning ``openapi_schema`` alone does not hold - the
+        # 0.141 cache re-generates whenever the route-version stamp moves.
+        document = build()
+
+        def _document() -> dict:
+            return document
+
+        app.openapi = _document  # type: ignore[method-assign]
+        missing = undocumented(router.routes())
+        if missing:
+            _logger.warning(f"openapi: {len(missing)} route(s) undocumented: {', '.join(missing)}")
 
     @app.api_route("/{path:path}", methods=_METHODS)
     async def handle(asgi: AsgiRequest) -> Any:
