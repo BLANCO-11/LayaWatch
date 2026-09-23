@@ -74,12 +74,12 @@ class _StubEngine:
         return _StubRouter(device or "cpu", self._agent)
 
 
-def build(tmp_path, *, english_only=False, is_english=True, block=False):
+def build(tmp_path, *, english_only=False, is_english=True, block=False, capture=False):
     db_path = tmp_path / "state.sqlite3"
     conn = connect(db_path)
     migrate(conn)
     conn.close()
-    recorder = Recorder()
+    recorder = Recorder(capture=capture, payload_max=32768)
     agent = _StubAgent(block=block)
     spans = ThreadLocalSpans(recorder)
     adapter = RealAdapter(
@@ -332,3 +332,40 @@ def test_concurrent_predicts_queue_behind_the_forward_lock(tmp_path) -> None:
     assert any(obs.meta.get("depth_at_acquire") == 1 for obs in waits)
     for trace in traces:
         assert_vocabulary(trace)
+
+
+def test_predict_records_request_and_response_payload_when_capture_is_on(tmp_path) -> None:
+    handle, recorder, _router, _adapter, _agent = build(tmp_path, capture=True)
+    body = {
+        "state": {"body": "refund jane@acme.example, call +44 20 7946 0958"},
+        "questions": BODY["questions"],
+    }
+    response = handle(make_request(body=body))
+    assert response.status == 200
+    trace = recorder.ring_traces()[-1]
+    assert_vocabulary(trace)
+    (payload,) = observations(trace, "payload")
+    captured_in = json.loads(payload.input)
+    captured_out = json.loads(payload.output)
+    assert captured_in["questions"] == BODY["questions"]
+    assert captured_out["answers"] == json.loads(response.body)["answers"]
+    # PII in free text is scrubbed from the stored copy.
+    assert "jane@acme.example" not in payload.input and "7946" not in payload.input
+    assert "[redacted:email]" in captured_in["state"]["body"]
+
+
+def test_predict_records_the_request_even_when_it_is_refused(tmp_path) -> None:
+    handle, recorder, _router, _adapter, _agent = build(
+        tmp_path, capture=True, english_only=True, is_english=False
+    )
+    response = handle(make_request())
+    assert response.status == 422
+    (payload,) = observations(recorder.ring_traces()[-1], "payload")
+    assert json.loads(payload.input)["questions"] == BODY["questions"]
+    assert payload.output is None
+
+
+def test_no_payload_event_while_capture_is_off(tmp_path) -> None:
+    handle, recorder, _router, _adapter, _agent = build(tmp_path)
+    assert handle(make_request()).status == 200
+    assert observations(recorder.ring_traces()[-1], "payload") == []

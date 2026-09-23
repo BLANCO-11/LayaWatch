@@ -39,12 +39,13 @@ VALID_ATTRS: dict[str, dict[str, object]] = {
         "message": "expecting value line 1 column 1",
         "where": "body.parse",
     },
+    "payload": {},
 }
 
 
 def test_every_doc_table_name_is_in_span_names() -> None:
     assert set(VALID_ATTRS) == set(SPAN_NAMES)
-    assert len(SPAN_NAMES) == 11
+    assert len(SPAN_NAMES) == 12
 
 
 def test_every_name_validates_its_doc_attributes() -> None:
@@ -59,7 +60,8 @@ def test_every_name_validates_its_doc_attributes() -> None:
 def test_observation_types_follow_the_doc_table() -> None:
     assert observation_type("forward") == "generation"
     assert observation_type("error") == "event"
-    span_names = SPAN_NAMES - {"forward", "error"}
+    assert observation_type("payload") == "event"
+    span_names = SPAN_NAMES - {"forward", "error", "payload"}
     assert all(observation_type(name) == "span" for name in span_names)
 
 

@@ -9,7 +9,9 @@ from layawatch.obs.redact import (
     byte_len,
     capture_value,
     is_redacted_key,
+    redact_for_capture,
     redact_structure,
+    scrub_pii,
     scrub_text,
 )
 
@@ -115,3 +117,41 @@ def test_byte_len_counts_utf8_bytes() -> None:
 def test_negative_max_bytes_is_rejected() -> None:
     with pytest.raises(ValueError, match="max_bytes"):
         scrub_text("x", -1)
+
+
+@pytest.mark.parametrize(
+    "raw, scrubbed",
+    [
+        ("mail jane.doe@acme-hr.example now", "mail [redacted:email] now"),
+        ("call +44 20 7946 0958", "call [redacted:number]"),
+        ("card 4111 1111 1111 1111", "card [redacted:number]"),
+        ("key lay_cdPwABCDEF12345678", "key [redacted:credential]"),
+        ("Authorization: Bearer abcdefgh12345678", "Authorization: [redacted:credential]"),
+    ],
+)
+def test_scrub_pii_replaces_values_in_free_text(raw: str, scrubbed: str) -> None:
+    assert scrub_pii(raw) == scrubbed
+
+
+@pytest.mark.parametrize("kept", ["as of 2026-06-30", "1594 rows", "order 12345", "v1.2.3"])
+def test_scrub_pii_keeps_dates_counts_and_short_numbers(kept: str) -> None:
+    assert scrub_pii(kept) == kept
+
+
+def test_redact_for_capture_keeps_numbers_under_a_redacted_key() -> None:
+    value = {
+        "probabilities": {"customer_email": 0.53, "order_id": 0.47},
+        "criteria": {"customer_email": "the address column"},
+        "email": "x@y.example",
+        "note": "reach me at x@y.example",
+    }
+    out = redact_for_capture(value)
+    assert out["probabilities"] == {"customer_email": 0.53, "order_id": 0.47}
+    assert out["criteria"]["customer_email"] == REDACTED
+    assert out["email"] == REDACTED
+    assert out["note"] == "reach me at [redacted:email]"
+
+
+def test_capture_value_scrubs_pii_values() -> None:
+    stored = capture_value({"message": "to jane@acme.example"}, enabled=True, max_bytes=2048)
+    assert stored is not None and "jane@acme.example" not in stored

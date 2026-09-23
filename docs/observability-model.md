@@ -31,6 +31,7 @@ groups by name. Every span records `start_ms` (offset from trace start) and `dur
 | `serialize` | span | `answers`, `bytes` | response construction |
 | `response.send` | span | `status`, `bytes` | closes the trace |
 | `error` | event | `code`, `message`, `where` | added on failure, always recorded |
+| `payload` | event | none | `/predict` request as `input`, response as `output`; recorded only while payload capture is on |
 
 Two spans are **absent by design** when the client pins the decision they record (phase 7
 section 4.4 item 21): `lang.detect` is skipped when the request pins `lang=` - the trace's
@@ -67,6 +68,13 @@ engine error.
   2048 bytes) for the playground and for traces explicitly tagged `capture`.
 - Redaction runs before truncation on keys matching `password`, `token`, `secret`, `api_key`,
   `authorization`, `email`, `phone`, `ssn`, `card` (case-insensitive, nested objects included).
+- With capture on, every `/predict` records a `payload` event: the request (`state`, `questions`,
+  and any `model`/`task`/`lang`) as `input` and the response as `output`, including for a refused
+  request. The trace detail page renders both.
+- Value-level scrubbing runs with the key redaction on captured payloads: email addresses,
+  runs of 10+ digits (phone, card, account numbers) and credential-shaped tokens are replaced
+  in every string. Numbers, booleans and nulls under a redacted key are kept (option names
+  such as `customer_email` key probabilities). Names and addresses in prose are not detected.
 - Capture is recorded per trace in `meta.payload_capture` so the UI can label it, and the trace detail
   page shows a warning banner when payloads are present.
 - Retention for captured payloads is 24 h regardless of trace retention.

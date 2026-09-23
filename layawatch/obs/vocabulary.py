@@ -87,6 +87,13 @@ _TABLE: dict[str, tuple[str, dict[str, type], bool]] = {
         {"code": str, "message": str, "where": str},
         False,
     ),
+    # The request (input) and response (output) of one engine call.
+    # No attributes; its content is the capture-gated input/output pair.
+    "payload": (
+        "event",
+        {},
+        True,
+    ),
 }
 
 _SPECS: dict[str, SpanSpec] = {
