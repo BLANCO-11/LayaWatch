@@ -31,6 +31,17 @@ function spanKind(observation: Observation): Span["kind"] {
   return "standard";
 }
 
+/* A captured payload is JSON unless truncation cut it; show it
+ * pretty-printed when it parses, raw (and labelled) when it does not. */
+function prettyPayload(value: string | null | undefined): string {
+  if (!value) return "(not captured)";
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return `${value}\n\n(truncated at LAYWATCH_PAYLOAD_MAX)`;
+  }
+}
+
 function formatBytes(value: number | null | undefined): string {
   if (typeof value !== "number" || value < 0) return "unknown";
   if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -92,6 +103,8 @@ export default function TraceDetailClient() {
       attrs: obs.meta ?? undefined,
     }));
 
+  const payloadObs = (detail?.observations ?? []).find((obs) => obs.name === "payload");
+
   const timeline: TimelineItem[] = detail
     ? [
         ...detail.scores.map((score) => ({
@@ -103,7 +116,9 @@ export default function TraceDetailClient() {
           ),
         })),
         ...(detail.observations ?? [])
-          .filter((obs) => obs.name === "model.load" || obs.type === "event")
+          .filter(
+            (obs) => obs.name !== "payload" && (obs.name === "model.load" || obs.type === "event"),
+          )
           .map((obs) => ({
             ts: `+${obs.start_ms.toFixed(1)} ms`,
             text:
@@ -182,6 +197,45 @@ export default function TraceDetailClient() {
                     Payload capture is on: request and response bodies were stored with this
                     trace&apos;s spans.
                   </Banner>
+                </div>
+              ) : null}
+              {payloadObs && (payloadObs.input || payloadObs.output) ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                    gap: 16,
+                    marginBottom: 16,
+                  }}
+                >
+                  <Card variant="flat" title="Request" meta="state + questions · PII scrubbed">
+                    <pre
+                      style={{
+                        margin: 0,
+                        maxHeight: 480,
+                        overflow: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        fontSize: 12,
+                      }}
+                    >
+                      {prettyPayload(payloadObs.input)}
+                    </pre>
+                  </Card>
+                  <Card variant="flat" title="Response" meta="answers · PII scrubbed">
+                    <pre
+                      style={{
+                        margin: 0,
+                        maxHeight: 480,
+                        overflow: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        fontSize: 12,
+                      }}
+                    >
+                      {prettyPayload(payloadObs.output)}
+                    </pre>
+                  </Card>
                 </div>
               ) : null}
               <div

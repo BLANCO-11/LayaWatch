@@ -32,15 +32,20 @@ def add_engine_routes(router: Router, adapter: EngineAdapter) -> None:
     def predict(request: Request) -> Response:
         payload = _validated(request)
         _record_request(request, payload)
-        result = _guard(
-            lambda: adapter.predict(
-                payload["state"],
-                payload["questions"],
-                model=_param(payload, "model"),
-                task=_param(payload, "task"),
-                lang=_param(payload, "lang"),
+        result = None
+        try:
+            result = _guard(
+                lambda: adapter.predict(
+                    payload["state"],
+                    payload["questions"],
+                    model=_param(payload, "model"),
+                    task=_param(payload, "task"),
+                    lang=_param(payload, "lang"),
+                )
             )
-        )
+        finally:
+            # In `finally` so a refused 400/422 still records what was sent.
+            _record_payload(payload, result)
         _record_result(result)
         return json_response(result)
 
@@ -106,6 +111,32 @@ def _record_request(request: Request, payload: dict[str, Any]) -> None:
     if ctx is None:
         return
     ctx.set(state_bytes=len(request.body), question_count=len(payload["questions"]))
+
+
+def _record_payload(payload: dict[str, Any], result: dict | None) -> None:
+    """Record the request and response as a `payload` event on the trace.
+
+    Stored only while capture is on (the recorder's `_capture` returns None
+    otherwise), redacted and PII-scrubbed by `obs.redact.capture_value`, and
+    nulled by the 24 h payload TTL in `store/retention.py`. Never raises:
+    observability must not take a request down.
+    """
+    ctx = current_context()
+    if ctx is None:
+        return
+    # Only while capture is ON. With capture off the event would carry nothing
+    # and still add an observation to every trace - changing the span sequence
+    # test_engine_api pins (the nine-span order).
+    if not getattr(getattr(ctx, "_recorder", None), "capture", False):
+        return
+    request = {"state": payload.get("state"), "questions": payload.get("questions")}
+    for name in ("model", "task", "lang"):
+        if payload.get(name):
+            request[name] = payload[name]
+    try:
+        ctx.event("payload", input=request, output=result)
+    except Exception:
+        pass
 
 
 def _record_result(result: dict) -> None:

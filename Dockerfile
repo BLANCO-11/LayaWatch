@@ -63,10 +63,13 @@ RUN SITE="$(python -c 'import site; print(site.getsitepackages()[0])')" \
 COPY --from=web /build/out /app/web/out
 
 # uid 10001 per the phase-8 contract; only /data (state) and /models (HF cache) are writable.
+# -R: the engine import check above runs as root with HOME=/data and leaves a root-owned
+# /data/.cache, which Docker seeds into the named volume; the engine then cannot write its
+# HF cache and the checkpoint download fails with Permission denied.
 RUN useradd --uid 10001 --user-group --home-dir /app --no-create-home \
         --shell /usr/sbin/nologin layawatch \
     && mkdir -p /data /models \
-    && chown layawatch:layawatch /data /models
+    && chown -R layawatch:layawatch /data /models
 
 USER layawatch
 
