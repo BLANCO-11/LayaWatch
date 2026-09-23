@@ -73,7 +73,7 @@ First run on any path: open the console, create the first owner in the setup wiz
 layawatch/        Python package: app (FastAPI app factory), http, store, obs, auth, engine, api
 web/              Next.js app, built to a static export and served by the Python process
 web/design/       approved mock + design references
-Dockerfile        multi-stage image: Node builds web/out, python:3.12-slim serves (non-root)
+Dockerfile        multi-stage image: Node builds web/out, python:3.12-slim serves (non-root); WITH_ENGINE build arg (default 1) ships engine wheels, 0 = console-only
 docker-compose.yml single-service compose with healthcheck and hardened defaults
 layawatch.service hardened systemd unit (docs/operations.md section 2.3)
 docs/             design language, architecture, observability model, API, security, operations

@@ -1,0 +1,23 @@
+{
+  "harness": "budget_check",
+  "subcommand": "image",
+  "timestamp": "20260923-070518",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      1.74,
+      1.91,
+      1.49
+    ],
+    "sqlite": "3.53.1"
+  },
+  "budget": {
+    "name": "image",
+    "value": -425.544,
+    "budget": 50.0,
+    "unit": "MB",
+    "pass": true
+  }
+}

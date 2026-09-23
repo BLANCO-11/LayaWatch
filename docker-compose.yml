@@ -9,6 +9,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Single image ships the real engine; "0" builds the console-only image (no wheels).
+        WITH_ENGINE: "1"
     image: layawatch:0.1.0
     restart: unless-stopped
     ports:
@@ -19,9 +22,10 @@ services:
       LAYA_STATE_DIR: "/data"
       LAYA_PORT: "8050"
       LAYWATCH_BIND: "0.0.0.0"
-      # Engine surface (docs/operations.md section 4).
-      LAYA_MODELS: "english,multilingual"
-      LAYA_ENGLISH_ONLY: "0"
+      # Engine surface (docs/operations.md section 4): english-only deployment —
+      # only the English checkpoint preloads; non-English states get 422.
+      LAYA_MODELS: "english"
+      LAYA_ENGLISH_ONLY: "1"
       # Recorder, retention and stream defaults (config.py defaults unless saved in the UI).
       LAYWATCH_TRACE_SAMPLE: "1.0"
       LAYWATCH_CAPTURE_PAYLOADS: "0"

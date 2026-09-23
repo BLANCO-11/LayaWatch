@@ -51,6 +51,10 @@ volumes `layawatch-data` (`/data`: `state.sqlite3`, `secret.key`) and `layawatch
 its `docs/architecture.md` section 6 default; the compose file binds `8050:8050`, so switch the
 published port to `127.0.0.1:8050:8050` when the host is not behind a proxy.
 
+The `WITH_ENGINE` build arg (compose sets `1`) selects the deploy flavor: `1` (default) installs
+torch + laya into the image so `POST /predict` runs the real engine out of the box; `0` builds a
+console-only image without engine wheels, which boots the fake adapter (`device` reports `fake`).
+
 ### 2.3 systemd (no container)
 
 The hardened unit ships as [`layawatch.service`](../layawatch.service) (transcribed from this
