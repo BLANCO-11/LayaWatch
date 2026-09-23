@@ -2,7 +2,7 @@ VENV ?= .venv
 PY = $(VENV)/bin/python
 UV ?= $(HOME)/.local/bin/uv
 
-.PHONY: all bootstrap dev migrate test test-ui web-check lint web-build smoke
+.PHONY: all bootstrap dev migrate test test-ui web-check lint web-build smoke image up down
 
 all: lint test
 
@@ -35,3 +35,13 @@ web-check:
 # Needs the engine deps (laya, torch) installed.
 smoke:
 	$(PY) scripts/smoke_laya.py
+
+# Container-first deploy path (state and model cache live in named volumes).
+image:
+	docker build -t layawatch:0.1.0 .
+
+up:
+	docker compose up -d --build
+
+down:
+	docker compose down

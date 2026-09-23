@@ -18,8 +18,9 @@ Design goals, in order:
 
 ## Status
 
-Implemented through Phase 7; Phase 8 packaging (container, scripts, release gate) lands with the
-`v0.1.0` tag. The deliverable set:
+Phases 0-8 complete and gated: full pytest suite green, all nine performance budgets met,
+the container contract tests pass and the image builds and boots hardened (non-root,
+read-only, migrations applied). This tree is the v0.1.0 deliverable set.
 
 - `layawatch/` Python package: app (FastAPI app factory), http, store, obs, auth, engine, api
 - `web/` Next.js console, built to a static export and served by the Python process
@@ -30,7 +31,18 @@ Implemented through Phase 7; Phase 8 packaging (container, scripts, release gate
 
 ## Quickstart
 
-Three install paths; `docs/operations.md` section 2 is the long form.
+The app is a Docker instance first; source and systemd are alternatives.
+`docs/operations.md` section 2 is the long form.
+
+**Container (recommended):**
+
+```bash
+docker compose up -d                              # or: make up — ./Dockerfile
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8050/healthz   # 200
+```
+
+State and the model cache live in named volumes (`layawatch-data`, `layawatch-models`);
+the image itself ships no state, no secrets and no Node.
 
 **Source (development):**
 
@@ -42,12 +54,8 @@ cd web && npm ci && npm run build && cd ..        # produces web/out
 python -m layawatch                               # serves http://127.0.0.1:8050
 ```
 
-**Container:**
-
-```bash
-docker compose up -d                              # ./Dockerfile, volumes for state and models
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8050/healthz   # 200
-```
+Local knobs (owner bootstrap, port, bind) live in `.env` at the repo root — it is loaded
+at boot, never committed and never baked into the image; real environment variables win.
 
 **systemd:** install `layawatch.service` per `docs/operations.md` section 2.3
 (`sudo cp layawatch.service /etc/systemd/system/ && sudo systemctl daemon-reload &&
