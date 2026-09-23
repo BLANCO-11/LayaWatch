@@ -5,7 +5,9 @@ Usage: .venv/bin/python scripts/web_check.py catalog bundle a11y
 - catalog: every design-language section 4 family has its component file and
   a data-family entry on /dev/catalog.
 - bundle: D-011 ceilings over web/out (first-load JS <= 150 KB gzip per route,
-  total export <= 3 MB). Exits non-zero on breach.
+  total export <= 3 MB). Build-time `.br`/`.gz` sidecars are reported but excluded
+  from the total: they are derived duplicates of payload already counted. Exits
+  non-zero on breach.
 - a11y: static checks (theme-init wiring, aria hooks, token completeness);
   the Playwright axe/Lighthouse pass runs under make test-ui.
 """
@@ -13,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import re
 import sys
 from pathlib import Path
 
@@ -106,7 +107,7 @@ def check_catalog() -> int:
         print(f"catalog: missing {CATALOG.relative_to(ROOT)}")
         return 1
     for family in UI_FILES:
-        if f'"{family}"' not in catalog_src and f"data-family" not in catalog_src:
+        if f'"{family}"' not in catalog_src and "data-family" not in catalog_src:
             missing.append(f"{family}: no catalog entry")
         elif family not in catalog_src:
             missing.append(f"{family}: no catalog entry")
@@ -141,9 +142,18 @@ def check_bundle() -> int:
             worst_name = str(path.relative_to(OUT))
         if size > PER_ROUTE_GZIP_B:
             failures.append(f"{path.relative_to(OUT)}: {size} gzip bytes > {PER_ROUTE_GZIP_B}")
-    total = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
+    total = sum(
+        p.stat().st_size
+        for p in OUT.rglob("*")
+        if p.is_file() and not p.name.endswith((".br", ".gz"))
+    )
+    sidecars = [p for p in OUT.rglob("*") if p.is_file() and p.name.endswith((".br", ".gz"))]
+    sidecar_b = sum(p.stat().st_size for p in sidecars)
     print(f"bundle: {len(js_files)} JS files, worst gzip {worst} B ({worst_name})")
-    print(f"bundle: total export {total} B (ceiling {TOTAL_EXPORT_B} B)")
+    print(
+        f"bundle: total export {total} B (ceiling {TOTAL_EXPORT_B} B); "
+        f"precompressed sidecars {sidecar_b} B in {len(sidecars)} files (excluded from ceiling)"
+    )
     if total > TOTAL_EXPORT_B:
         failures.append(f"total {total} B > {TOTAL_EXPORT_B} B")
     if failures:

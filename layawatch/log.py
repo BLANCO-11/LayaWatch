@@ -112,11 +112,19 @@ def get_logger(source: str) -> Logger:
 
 
 def ring_entries(n: int | None = None) -> list[dict]:
-    """Ring snapshot, oldest to newest; ``n`` keeps the newest entries."""
+    """Ring snapshot, oldest to newest; ``n`` keeps the newest entries.
+
+    Index-snapshot read (4.2 item 8): only the ``n`` newest slots are copied by index
+    under the lock - never the whole ring.
+    """
     with _ring_lock:
-        items = list(_ring)
-    if n is not None and n >= 0:
-        items = items[-n:] if n else []
+        length = len(_ring)
+        if n is None or n < 0 or n >= length:
+            items = list(_ring)
+        elif n == 0:
+            items = []
+        else:
+            items = [_ring[i] for i in range(length - n, length)]
     return items
 
 

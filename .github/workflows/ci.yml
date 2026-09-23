@@ -22,3 +22,66 @@ jobs:
       - uses: actions/checkout@v5
       - name: Web build (placeholder until Phase 4)
         run: if [ -f web/package.json ]; then cd web && npm ci && npm run build; else echo "web not scaffolded until Phase 4"; fi
+
+  # Phase 7 plan task 12 / docs/performance.md section 6: bench.py overhead and bench.py api
+  # on every change, failing at 2x the section 1 budgets (loose thresholds, noisy machines
+  # tolerated). Section 1 budgets -> CI guard thresholds:
+  #   recording overhead  3 ms p95  -> BENCH_OVERHEAD_MAX_MS  6 ms
+  #   trace list         50 ms p95  -> BENCH_TRACES_MAX_MS   100 ms
+  #   metrics 15 m       30 ms p95  -> BENCH_METRICS_MAX_MS   60 ms
+  # Each run writes its JSON under bench/results/; the last step reads those JSONs and fails
+  # on breach. scripts/budget_check.py at the HARD thresholds (120 MB / 200 MB / 3 s / 2 %)
+  # is the Phase 8 release gate, not a CI job.
+  bench-guards:
+    runs-on: ubuntu-latest
+    env:
+      LAYA_STATE_DIR: ${{ github.workspace }}/lw-bench-ci
+      LW_BENCH_PORT: "8091"
+      BENCH_OVERHEAD_MAX_MS: "6"   # 2x the 3 ms p95 section 1 budget
+      BENCH_TRACES_MAX_MS: "100"   # 2x the 50 ms p95 section 1 budget
+      BENCH_METRICS_MAX_MS: "60"   # 2x the 30 ms p95 section 1 budget
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Runtime deps (pyproject [project] dependencies)
+        run: pip install "fastapi>=0.115" "uvicorn>=0.30" "httpx>=0.27"
+      - name: Seed the measurement database (10k traces)
+        run: python scripts/seed.py --traces 10000 --observations 9
+      - name: bench.py overhead (section 1 budget 3 ms p95, guard 6 ms)
+        run: python scripts/bench.py overhead
+      - name: bench.py api (section 1 budgets 50/30 ms p95, guards 100/60 ms)
+        run: python scripts/bench.py api
+      - name: Enforce 2x guards from bench/results JSON
+        run: |
+          python - <<'PY'
+          import glob, json, os, sys
+
+          guards = {
+              "overhead": float(os.environ["BENCH_OVERHEAD_MAX_MS"]),
+              "traces": float(os.environ["BENCH_TRACES_MAX_MS"]),
+              "metrics_15m": float(os.environ["BENCH_METRICS_MAX_MS"]),
+          }
+          newest = sorted(
+              glob.glob("bench/results/[0-9]*.json"), key=os.path.getmtime, reverse=True
+          )
+          seen, failures = {}, []
+          for path in newest:
+              data = json.load(open(path))
+              for name, limit in guards.items():
+                  if name in seen or name not in data.get("budgets", {}):
+                      continue
+                  value = data["budgets"][name]["value"]
+                  seen[name] = value
+                  print(f"{name}: {value} ms (guard {limit} ms) from {path}")
+                  if value > limit:
+                      failures.append(f"{name} {value} ms exceeds 2x budget {limit} ms")
+              if len(seen) == len(guards):
+                  break
+          missing = sorted(set(guards) - set(seen))
+          if missing:
+              failures.append(f"budget rows missing from bench/results JSONs: {missing}")
+          print("\n".join(failures) if failures else "bench guards green at 2x budget")
+          sys.exit(1 if failures else 0)
+          PY

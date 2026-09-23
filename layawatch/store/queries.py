@@ -569,8 +569,10 @@ def list_traces(
         if order == "newest":
             if len(keys) != 2 or not _is_number(keys[0]) or not isinstance(keys[1], str):
                 raise InvalidFilter("cursor is not a valid pagination cursor")
-            clauses.append("(ts_start < ? OR (ts_start = ? AND id < ?))")
-            args.extend((keys[0], keys[0], keys[1]))
+            # Row-value form of (ts_start, id) < (cursor): one index seek at any depth
+            # (docs/performance.md section 4.3 item 14, constant cost on deep pages).
+            clauses.append("(ts_start, id) < (?, ?)")
+            args.extend((keys[0], keys[1]))
         else:
             if (
                 len(keys) != 3
@@ -988,8 +990,10 @@ def logs_list(conn: sqlite3.Connection, params: Mapping[str, Any]) -> dict:
         if len(keys) != 2 or not _is_number(keys[0]) or not _is_number(keys[1]):
             raise InvalidFilter("cursor is not a valid pagination cursor")
         ts, log_id = keys
-        clauses.append("(ts < ? OR (ts = ? AND id < ?))")
-        args.extend((ts, ts, log_id))
+        # Row-value form of (ts, id) < (cursor): one index seek at any depth
+        # (docs/performance.md section 4.3 item 14, constant cost on deep pages).
+        clauses.append("(ts, id) < (?, ?)")
+        args.extend((ts, log_id))
 
     where_sql = " AND ".join(clauses) if clauses else "1"
     rows = conn.execute(

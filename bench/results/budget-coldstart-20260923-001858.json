@@ -1,0 +1,23 @@
+{
+  "harness": "budget_check",
+  "subcommand": "coldstart",
+  "timestamp": "20260923-001858",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.83,
+      0.75,
+      0.79
+    ],
+    "sqlite": "3.53.1"
+  },
+  "budget": {
+    "name": "coldstart",
+    "value": 356.34,
+    "budget": 3000.0,
+    "unit": "ms",
+    "pass": true
+  }
+}

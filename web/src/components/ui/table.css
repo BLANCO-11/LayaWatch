@@ -45,6 +45,21 @@
   border-bottom: 0;
 }
 
+/* Catalog 4.6 item 30: on tables past 100 rows, offscreen rows skip layout and
+ * paint (`content-visibility: auto`) so the DOM stays responsive at 10k rows.
+ * `auto` keeps each row's last-rendered height so the scrollbar does not jump;
+ * short tables (including the 6-row skeleton) are untouched. */
+.lw-tbl-wrap:has(tbody tr:nth-child(101)) tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 45px;
+}
+
+@media print {
+  .lw-tbl-wrap tbody tr {
+    content-visibility: visible;
+  }
+}
+
 .lw-tbl-wrap tbody tr:hover {
   background: var(--tint-hover);
 }

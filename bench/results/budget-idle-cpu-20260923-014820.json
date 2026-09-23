@@ -1,0 +1,23 @@
+{
+  "harness": "budget_check",
+  "subcommand": "idle-cpu",
+  "timestamp": "20260923-014820",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.55,
+      0.7,
+      0.69
+    ],
+    "sqlite": "3.53.1"
+  },
+  "budget": {
+    "name": "idle-cpu",
+    "value": 0.133,
+    "budget": 2.0,
+    "unit": "%",
+    "pass": true
+  }
+}

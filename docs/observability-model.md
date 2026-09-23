@@ -32,6 +32,14 @@ groups by name. Every span records `start_ms` (offset from trace start) and `dur
 | `response.send` | span | `status`, `bytes` | closes the trace |
 | `error` | event | `code`, `message`, `where` | added on failure, always recorded |
 
+Two spans are **absent by design** when the client pins the decision they record (phase 7
+section 4.4 item 21): `lang.detect` is skipped when the request pins `lang=` - the trace's
+`lang` carries the pinned value instead, except on an english-only deployment where
+detection still runs and records, because it gates the 422 refusal - and `route.decide` is
+skipped when the request pins `model=`: the pin is the decision, `route_reason` keeps the
+router's explicit-model reason, and the decision is computed once, untimed. `POST /route`
+accepts no pins, so both spans are unconditional there.
+
 Rejected requests produce a short trace: `http.receive`, `auth.verify`, `body.parse` or `lang.detect`,
 `error`, `response.send`. A 422 non-English rejection is a successful observation of a refusal, not an
 engine error.

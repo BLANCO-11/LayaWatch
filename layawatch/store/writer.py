@@ -252,12 +252,8 @@ class Writer:
     def _run(self) -> None:
         try:
             conn = db.connect(self._db_path)
-            # performance.md section 4.3 item 11/12: NORMAL under WAL is the documented
-            # durability tradeoff (architecture section 5); the writer owns all writes.
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA temp_store=MEMORY")
-            conn.execute("PRAGMA cache_size=-16000")
-            conn.execute("PRAGMA mmap_size=134217728")
+            # The 4.3 item 11 pragmas come from db.connect; the writer additionally
+            # manages BEGIN/COMMIT per batch itself.
             conn.isolation_level = None  # manual BEGIN/COMMIT per batch
             self._conn = conn
             while True:
@@ -282,6 +278,7 @@ class Writer:
             self._conn = None
             if conn is not None:
                 _rollback(conn)
+                db.optimize(conn)  # 4.3 item 18: PRAGMA optimize on shutdown
                 conn.close()
             with self._cond:
                 self._flush_wanted = False
@@ -400,6 +397,7 @@ class Writer:
 
         self._open = attempt_work
         self._retried = False
+        db.optimize(conn)  # 4.3 item 18: PRAGMA optimize after the bulk write
         with self._cond:
             self._writes += 1
             self._write_latency_ms = (time.perf_counter() - started) * 1000.0

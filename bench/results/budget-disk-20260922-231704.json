@@ -1,0 +1,23 @@
+{
+  "harness": "budget_check",
+  "subcommand": "disk",
+  "timestamp": "20260922-231704",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.89,
+      1.01,
+      0.98
+    ],
+    "sqlite": "3.53.1"
+  },
+  "budget": {
+    "name": "disk",
+    "value": 44.833,
+    "budget": 200.0,
+    "unit": "MB",
+    "pass": true
+  }
+}

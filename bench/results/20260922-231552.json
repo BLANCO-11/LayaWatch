@@ -1,0 +1,157 @@
+{
+  "harness": "bench",
+  "subcommand": "all",
+  "timestamp": "20260922-231552",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      1.06,
+      1.04,
+      0.99
+    ],
+    "sqlite": "3.53.1"
+  },
+  "series": {
+    "record_on": {
+      "p50": 1.161,
+      "p90": 1.521,
+      "p95": 1.878,
+      "p99": 2.525,
+      "max": 15.373,
+      "n": 250
+    },
+    "record_off": {
+      "p50": 1.254,
+      "p90": 1.648,
+      "p95": 1.879,
+      "p99": 3.357,
+      "max": 14.591,
+      "n": 250
+    },
+    "overhead_added": {
+      "p50": -0.093,
+      "p90": -0.127,
+      "p95": -0.001,
+      "p99": -0.832,
+      "max": 0.782,
+      "n": 250
+    },
+    "predict_latency": {
+      "p50": 1.145,
+      "p90": 1.379,
+      "p95": 1.555,
+      "p99": 2.346,
+      "max": 20.338,
+      "n": 300
+    },
+    "traces": {
+      "p50": 2.52,
+      "p90": 5.402,
+      "p95": 5.729,
+      "p99": 9.22,
+      "max": 17.57,
+      "n": 100
+    },
+    "traces_deep": {
+      "p50": 3.532,
+      "p90": 3.851,
+      "p95": 5.277,
+      "p99": 5.485,
+      "max": 5.513,
+      "n": 100
+    },
+    "metrics_15m": {
+      "p50": 1.866,
+      "p90": 2.146,
+      "p95": 2.309,
+      "p99": 2.562,
+      "max": 2.586,
+      "n": 100
+    },
+    "static_asset": {
+      "p50": 1.497,
+      "p90": 2.34,
+      "p95": 2.751,
+      "p99": 3.691,
+      "max": 3.75,
+      "n": 100
+    },
+    "static_conditional_304": {
+      "p50": 1.257,
+      "p90": 1.427,
+      "p95": 1.481,
+      "p99": 1.582,
+      "max": 3.601,
+      "n": 100
+    },
+    "sse_tick": {
+      "p50": 32.009,
+      "p90": 67.225,
+      "p95": 69.031,
+      "p99": 69.031,
+      "max": 69.031,
+      "n": 12
+    }
+  },
+  "budgets": {
+    "overhead": {
+      "limit": 3.0,
+      "unit": "ms",
+      "value": -0.001,
+      "pass": true,
+      "note": "p95 of (record_on - record_off), n=250 per side, POST /predict, fake engine, LAYWATCH_RECORD=1 vs 0"
+    },
+    "traces": {
+      "limit": 50.0,
+      "unit": "ms",
+      "value": 5.729,
+      "pass": true,
+      "note": "worst of shallow p95 5.729 ms and deep-cursor p95 5.277 ms at offset 5000 (100 keyset pages walked)"
+    },
+    "metrics_15m": {
+      "limit": 30.0,
+      "unit": "ms",
+      "value": 2.309,
+      "pass": true,
+      "note": "GET /api/v1/metrics?metrics=requests,latency,errors,queue&range=15m"
+    },
+    "static": {
+      "limit": 5.0,
+      "unit": "ms",
+      "value": 2.751,
+      "pass": true,
+      "note": "/_next/static/chunks/0-fgc7lu98d9c.js; conditional re-requests: 100/100 returned 304"
+    },
+    "sse_tick": {
+      "limit": 5.0,
+      "unit": "ms",
+      "value": 69.031,
+      "pass": false,
+      "note": "per wave: max-min arrival delta across data-fed clients, each client's clock anchored on its own hello frame; first 2 waves skipped; only 8/20 clients received stream data - 8 of 16 registered clients starved after HTTP 200 (stream producers are lifetime-bound threads on the 8-worker event-loop default executor) and 4 connections were rejected ['sse_unavailable'] at hub max_clients=16; the 20-client precondition is unmeetable on stock code (recorded, not fixed)"
+    }
+  },
+  "scalars": {
+    "throughput_rps": 773.2,
+    "wall_s": 0.388,
+    "requests": 300,
+    "traces_at_start": 10320,
+    "traces_at_end": 10320,
+    "deep_cursor_offset": 5000,
+    "deep_cursor_pages": 100,
+    "conditional_304": 100,
+    "conditional_requests": 100,
+    "clients_requested": 20,
+    "clients_registered": 16,
+    "clients_data_fed": 8,
+    "clients_starved": 8,
+    "clients_rejected": 4,
+    "rejection_codes": [
+      "sse_unavailable"
+    ],
+    "stream_executor_workers": 8,
+    "waves_measured": 12,
+    "window_s": 45.0
+  }
+}

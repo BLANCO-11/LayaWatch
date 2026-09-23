@@ -53,6 +53,12 @@ _CONTENT_TYPES: dict[str, str] = {
 #: instead of 404; the client reads the real id from the URL. Single-segment tails only.
 _DEEP_LINK_FALLBACKS: tuple[tuple[str, str], ...] = (("/traces/", "/traces/detail"),)
 
+#: Extensions eligible for build-time precompression sidecars (``<file>.br`` / ``<file>.gz``,
+#: written by ``web/scripts/precompress.mjs``). Kept in sync with that script.
+_PRECOMPRESS_TYPES = frozenset({"html", "css", "js", "mjs", "json", "map", "svg", "txt"})
+#: Accept-Encoding token to sidecar suffix, in preference order (brotli wins a tie).
+_ENCODINGS: tuple[tuple[str, str], ...] = (("br", ".br"), ("gzip", ".gz"))
+
 _NEXT_STATIC_PREFIX = "/_next/static/"
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
 _CACHE_HTML = "no-cache"
@@ -115,6 +121,31 @@ def _extension(path: str) -> str:
     return name[dot + 1 :].lower()
 
 
+def _acceptable(accept: str, token: str) -> bool:
+    """Whether ``accept`` lists ``token`` with a non-zero q-value."""
+    for part in accept.split(","):
+        name, _, params = part.partition(";")
+        if name.strip().lower() != token:
+            continue
+        for param in params.split(";"):
+            key, _, value = param.partition("=")
+            if key.strip().lower() == "q":
+                try:
+                    return float(value.strip()) > 0.0
+                except ValueError:
+                    return False
+        return True
+    return False
+
+
+def _sidecar(path: Path, suffix: str, root: Path) -> Path | None:
+    """Existing ``<path><suffix>`` inside ``root`` after symlink resolution, else ``None``."""
+    candidate = path.with_name(path.name + suffix).resolve()
+    if candidate.is_relative_to(root) and candidate.is_file():
+        return candidate
+    return None
+
+
 def _cache_control(request_path: str, ext: str) -> str:
     if request_path.startswith(_NEXT_STATIC_PREFIX):
         return _CACHE_IMMUTABLE
@@ -133,26 +164,51 @@ def _candidates(path: str) -> list[str]:
     return [path + "/index.html", path + ".html"]
 
 
-def _serve_file(candidate: str, request_path: str, root: Path) -> Response | None:
+def _serve_file(candidate: str, request_path: str, root: Path, accept: str) -> Response | None:
     target = (root / candidate.lstrip("/")).resolve()
     if not target.is_relative_to(root) or not target.is_file():
         return None
-    try:
-        body = target.read_bytes()
-    except OSError as exc:
-        _log.warning(f"cannot read {target}: {exc}")
-        return None
     ext = _extension(candidate)
+    # Serve a precompressed sidecar when one exists and the client accepts it; send
+    # Vary whenever any sidecar exists, because identity bytes are still a valid
+    # (and negotiated) answer for clients that do not.
+    source, encoding, vary = target, None, False
+    if ext in _PRECOMPRESS_TYPES:
+        available = {
+            token: sidecar
+            for token, suffix in _ENCODINGS
+            if (sidecar := _sidecar(target, suffix, root)) is not None
+        }
+        if available:
+            vary = True
+            for token, _suffix in _ENCODINGS:
+                if token in available and _acceptable(accept, token):
+                    source, encoding = available[token], token
+                    break
+    try:
+        body = source.read_bytes()
+    except OSError as exc:
+        _log.warning(f"cannot read {source}: {exc}")
+        if source is not target:  # stale/missing sidecar: fall back to identity bytes
+            source, encoding = target, None
+            try:
+                body = source.read_bytes()
+            except OSError as identity_exc:
+                _log.warning(f"cannot read {source}: {identity_exc}")
+                return None
+        else:
+            return None
     etag = 'W/"' + hashlib.sha1(body).hexdigest() + '"'
-    return Response(
-        status=200,
-        headers={
-            "Content-Type": _CONTENT_TYPES[ext],
-            "Cache-Control": _cache_control(request_path, ext),
-            "ETag": etag,
-        },
-        body=body,
-    )
+    headers = {
+        "Content-Type": _CONTENT_TYPES[ext],
+        "Cache-Control": _cache_control(request_path, ext),
+        "ETag": etag,
+    }
+    if vary:
+        headers["Vary"] = "Accept-Encoding"
+    if encoding is not None:
+        headers["Content-Encoding"] = encoding
+    return Response(status=200, headers=headers, body=body)
 
 
 def _build_page() -> Response:
@@ -175,12 +231,14 @@ def _not_found_page(web_root: Path) -> Response:
     )
 
 
-def resolve(path: str, web_root: Path) -> Response | None:
+def resolve(path: str, web_root: Path, accept: str = "") -> Response | None:
     """Resolve a request path to a 200 file response, or ``None`` on a miss.
 
     Percent-decodes the path once, rejects ``..`` segments and anything escaping
     ``web_root`` after ``Path.resolve()``, and never serves directories. API-shaped
     paths raise ``HttpError(404, "not_found")`` so callers render the JSON envelope.
+    ``accept`` is the request's ``Accept-Encoding``: it selects a precompressed
+    sidecar when the build produced one (catalog 4.6 item 31).
     """
     decoded = unquote(path)
     if decoded.startswith(_API_PREFIX) or decoded in _API_EXACT:
@@ -193,7 +251,7 @@ def resolve(path: str, web_root: Path) -> Response | None:
             return _build_page()
         return None
     for candidate in _candidates(decoded):
-        response = _serve_file(candidate, decoded, root)
+        response = _serve_file(candidate, decoded, root, accept)
         if response is not None:
             return response
     for prefix, exemplar in _DEEP_LINK_FALLBACKS:
@@ -201,36 +259,37 @@ def resolve(path: str, web_root: Path) -> Response | None:
         if not tail or "/" in tail:
             continue
         for candidate in _candidates(exemplar):
-            response = _serve_file(candidate, decoded, root)
+            response = _serve_file(candidate, decoded, root, accept)
             if response is not None:
                 return response
     return None
 
 
+def _header(headers: dict[str, str], name: str) -> str:
+    """Case-insensitive single-header lookup; ``""`` when absent."""
+    for key, value in headers.items():
+        if key.lower() == name:
+            return value
+    return ""
+
+
 def _make_handler(web_root: Path):
     def handle(request: Request) -> Response:
-        response = resolve(request.path, web_root)
+        response = resolve(request.path, web_root, _header(request.headers, "accept-encoding"))
         if response is None:
             return _not_found_page(web_root)
         etag = response.headers.get("ETag")
         if etag is not None:
-            wanted = next(
-                (
-                    value.strip()
-                    for key, value in request.headers.items()
-                    if key.lower() == "if-none-match"
-                ),
-                "",
-            )
+            wanted = _header(request.headers, "if-none-match").strip()
             if wanted == "*" or wanted == etag:
-                return Response(
-                    status=304,
-                    headers={
-                        "ETag": etag,
-                        "Cache-Control": response.headers["Cache-Control"],
-                    },
-                    body=b"",
-                )
+                headers = {
+                    "ETag": etag,
+                    "Cache-Control": response.headers["Cache-Control"],
+                }
+                vary = response.headers.get("Vary")
+                if vary is not None:
+                    headers["Vary"] = vary
+                return Response(status=304, headers=headers, body=b"")
         return response
 
     return handle

@@ -1,0 +1,52 @@
+{
+  "harness": "bench",
+  "subcommand": "overhead",
+  "timestamp": "20260923-003610",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.95,
+      0.73,
+      0.76
+    ],
+    "sqlite": "3.53.1"
+  },
+  "series": {
+    "record_on": {
+      "p50": 1.212,
+      "p90": 1.462,
+      "p95": 1.57,
+      "p99": 2.393,
+      "max": 14.499,
+      "n": 250
+    },
+    "record_off": {
+      "p50": 1.115,
+      "p90": 1.349,
+      "p95": 1.398,
+      "p99": 2.277,
+      "max": 14.241,
+      "n": 250
+    },
+    "overhead_added": {
+      "p50": 0.097,
+      "p90": 0.113,
+      "p95": 0.172,
+      "p99": 0.116,
+      "max": 0.258,
+      "n": 250
+    }
+  },
+  "budgets": {
+    "overhead": {
+      "limit": 3.0,
+      "unit": "ms",
+      "value": 0.172,
+      "pass": true,
+      "note": "p95 of (record_on - record_off), n=250 per side, POST /predict, fake engine, LAYWATCH_RECORD=1 vs 0"
+    }
+  },
+  "scalars": {}
+}

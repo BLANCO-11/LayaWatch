@@ -1,0 +1,64 @@
+{
+  "harness": "bench",
+  "subcommand": "api",
+  "timestamp": "20260923-005815",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.8,
+      0.74,
+      0.75
+    ],
+    "sqlite": "3.53.1"
+  },
+  "series": {
+    "traces": {
+      "p50": 1.605,
+      "p90": 1.952,
+      "p95": 2.088,
+      "p99": 2.301,
+      "max": 2.807,
+      "n": 100
+    },
+    "traces_deep": {
+      "p50": 1.855,
+      "p90": 2.248,
+      "p95": 2.35,
+      "p99": 2.969,
+      "max": 3.189,
+      "n": 100
+    },
+    "metrics_15m": {
+      "p50": 1.132,
+      "p90": 1.279,
+      "p95": 1.296,
+      "p99": 1.348,
+      "max": 1.402,
+      "n": 100
+    }
+  },
+  "budgets": {
+    "traces": {
+      "limit": 50.0,
+      "unit": "ms",
+      "value": 2.35,
+      "pass": true,
+      "note": "worst of shallow p95 2.088 ms and deep-cursor p95 2.35 ms at offset 5000 (100 keyset pages walked)"
+    },
+    "metrics_15m": {
+      "limit": 30.0,
+      "unit": "ms",
+      "value": 1.296,
+      "pass": true,
+      "note": "GET /api/v1/metrics?metrics=requests,latency,errors,queue&range=15m"
+    }
+  },
+  "scalars": {
+    "traces_at_start": 10000,
+    "traces_at_end": 10000,
+    "deep_cursor_offset": 5000,
+    "deep_cursor_pages": 100
+  }
+}

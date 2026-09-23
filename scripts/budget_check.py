@@ -10,20 +10,29 @@ Budgets and the harness contract come from ``docs/performance.md`` sections 1 an
 Usage::
 
     .venv/bin/python scripts/budget_check.py rss
-    .venv/bin/python scripts/budget_check.py all --json
+    LAYA_STATE_DIR=/tmp/lw-bench .venv/bin/python scripts/budget_check.py all
+    .venv/bin/python scripts/budget_check.py disk --json
 
-Every run prints one table row per budget (``name value budget PASS/FAIL``); ``--json`` replaces
-the table with a flat array of ``{"name", "value", "budget", "unit", "pass"}`` objects for the
-bench gate. ``all`` runs every subcommand in the table order above and stops at the first breach.
+Every run prints one table row per budget (``name value budget PASS/FAIL``) and writes the same
+row to ``bench/results/budget-<name>-<timestamp>.json`` for cross-phase comparison; ``--json``
+additionally prints a flat array of ``{"name", "value", "budget", "unit", "pass"}`` objects to
+stdout (the path notice goes to stderr). ``all`` runs every subcommand in the table order above
+and stops at the first breach.
 Exit codes: 0 when every checked budget passes, 1 on a breach or an impossible measurement, 2 on
 usage errors.
 
-The ``rss``, ``coldstart`` and ``idle-cpu`` measurements launch a throwaway ``python -m
-layawatch`` child on ``LAYA_PORT=8099`` with ``LAYA_STATE_DIR=/tmp/lw-p1-scripts`` and SIGTERM it
-in a ``finally`` block; child output lands in ``budget-<name>.log`` next to the state database.
-``disk`` counts ``LAYA_STATE_DIR`` only (default ``.``, matching ``layawatch.config.Config``) and
-never counts the Hugging Face model cache, even when a deployment places that cache inside the
-state directory. An ``image`` subcommand is deliberately absent; a later phase adds it.
+All four measurements read ONE database: ``LAYA_STATE_DIR`` (default ``.``, matching
+``layawatch.config.Config``), the same directory ``scripts/seed.py`` seeds and ``scripts/bench.py``
+targets. The ``rss``, ``coldstart`` and ``idle-cpu`` measurements launch a throwaway child on
+``LAYA_PORT=8099`` against that state directory and SIGTERM it in a ``finally`` block; child
+output lands in ``budget-<name>.log`` next to the state database. The child boots engineless:
+the launch command nulls ``sys.modules["laya"]`` before ``layawatch/__main__.py`` probes
+``importlib.util.find_spec("laya")``, so the deterministic FakeAdapter serves (healthz reports
+``device=fake``) and no checkpoint loads during a measurement (P1-I3 warns against parallel
+engine loads; the RSS budget excludes model weights). ``disk`` counts the same
+``LAYA_STATE_DIR`` and never counts the Hugging Face model cache, even when a deployment places
+that cache inside the state directory. An ``image`` subcommand is deliberately absent; a later
+phase adds it.
 """
 from __future__ import annotations
 
@@ -31,7 +40,9 @@ import argparse
 import http.client
 import json
 import os
+import platform
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -40,9 +51,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CHILD_STATE_DIR = Path("/tmp/lw-p1-scripts")
 PORT = 8099
-HEALTH_URL = f"http://127.0.0.1:{PORT}/healthz"
+#: Engineless boot: null the module before __main__.py's find_spec probe so the fake adapter
+#: serves and no checkpoint can load while a measurement runs (see the module docstring).
+_BOOT = (
+    "import sys; sys.modules['laya'] = None;"
+    " from layawatch.__main__ import main; raise SystemExit(main())"
+)
 RSS_BUDGET_MB = 120.0
 DISK_BUDGET_MB = 200.0
 COLDSTART_BUDGET_MS = 3000.0
@@ -116,21 +131,59 @@ def _tail(log_path: Path, lines: int = 20) -> str:
     return "\n".join(content[-lines:]) or "(empty log)"
 
 
-def _spawn(name: str) -> tuple[subprocess.Popen[bytes], float]:
-    """Start ``python -m layawatch`` for ``name``; return the child and its launch timestamp."""
-    CHILD_STATE_DIR.mkdir(parents=True, exist_ok=True)
+def state_dir() -> Path:
+    """The one state directory every measurement reads (``LAYA_STATE_DIR``, default ``.``)."""
+    return Path(os.environ.get("LAYA_STATE_DIR") or ".")
+
+
+def environment() -> dict[str, object]:
+    """Compact host block recorded with every result (evidence, cross-phase comparison)."""
+    return {
+        "host": socket.gethostname(),
+        "python": platform.python_version(),
+        "cpus": os.cpu_count(),
+        "loadavg": [round(value, 2) for value in os.getloadavg()],
+        "sqlite": sqlite3.sqlite_version,
+    }
+
+
+def write_result(payload: dict, stem: str) -> Path:
+    """Write one harness result JSON under ``bench/results/<stem>.json``; returns the path."""
+    target = REPO_ROOT / "bench" / "results" / f"{stem}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2) + "\n")
+    return target
+
+
+def spawn_server(
+    *,
+    state_dir: Path,
+    port: int,
+    log_name: str,
+    extra_env: dict[str, str] | None = None,
+) -> tuple[subprocess.Popen[bytes], float]:
+    """Start an engineless ``python -m layawatch`` child on ``port``; return it and its launch time.
+
+    ``LAYA_STATE_DIR=state_dir`` makes the child serve the same seeded database every harness
+    reads; ``log_name`` lands next to that database. ``_BOOT`` forces the deterministic
+    FakeAdapter (no checkpoint ever loads - P1-I3). ``extra_env`` overlays the child
+    environment (e.g. ``LAYWATCH_RECORD=0`` for the overhead A/B).
+    """
+    state_dir.mkdir(parents=True, exist_ok=True)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.settimeout(0.5)
-        if probe.connect_ex(("127.0.0.1", PORT)) == 0:
-            raise HarnessError(f"port {PORT} already has a listener; stop it before measuring")
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            raise HarnessError(f"port {port} already has a listener; stop it before measuring")
     env = os.environ.copy()
-    env["LAYA_PORT"] = str(PORT)
-    env["LAYA_STATE_DIR"] = str(CHILD_STATE_DIR)
-    log_path = CHILD_STATE_DIR / f"budget-{name}.log"
+    env["LAYA_PORT"] = str(port)
+    env["LAYA_STATE_DIR"] = str(state_dir)
+    if extra_env:
+        env.update(extra_env)
+    log_path = state_dir / log_name
     launched = time.perf_counter()
     with open(log_path, "wb") as log_file:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "layawatch"],
+            [sys.executable, "-c", _BOOT],
             cwd=str(REPO_ROOT),
             env=env,
             stdout=log_file,
@@ -139,7 +192,7 @@ def _spawn(name: str) -> tuple[subprocess.Popen[bytes], float]:
     return proc, launched
 
 
-def _stop(proc: subprocess.Popen[bytes]) -> None:
+def stop_server(proc: subprocess.Popen[bytes]) -> None:
     """SIGTERM the child, escalating to SIGKILL only if it refuses to exit."""
     if proc.poll() is not None:
         return
@@ -151,8 +204,15 @@ def _stop(proc: subprocess.Popen[bytes]) -> None:
         proc.wait(timeout=5)
 
 
-def _wait_serving(proc: subprocess.Popen[bytes], launched: float, log_path: Path) -> float:
-    """Poll ``GET /healthz`` until 200; return elapsed ms since ``launched``."""
+def wait_serving(
+    proc: subprocess.Popen[bytes],
+    launched: float,
+    log_path: Path,
+    *,
+    port: int,
+) -> float:
+    """Poll ``GET /healthz`` on ``port`` until 200; return elapsed ms since ``launched``."""
+    health_url = f"http://127.0.0.1:{port}/healthz"
     deadline = time.perf_counter() + STARTUP_TIMEOUT_S
     while True:
         if proc.poll() is not None:
@@ -161,18 +221,26 @@ def _wait_serving(proc: subprocess.Popen[bytes], launched: float, log_path: Path
                 f"log tail:\n{_tail(log_path)}"
             )
         try:
-            with urllib.request.urlopen(HEALTH_URL, timeout=1) as resp:
+            with urllib.request.urlopen(health_url, timeout=1) as resp:
                 if resp.status == 200:
                     return (time.perf_counter() - launched) * 1000
         except (OSError, http.client.HTTPException):
             pass  # connection refused / transient bad response: keep polling
         if time.perf_counter() >= deadline:
             raise StartupTimeout(
-                f"no 200 from {HEALTH_URL} within {STARTUP_TIMEOUT_S:.0f}s; "
+                f"no 200 from {health_url} within {STARTUP_TIMEOUT_S:.0f}s; "
                 f"log tail:\n{_tail(log_path)}",
                 (time.perf_counter() - launched) * 1000,
             )
         time.sleep(POLL_INTERVAL_S)
+
+
+def _spawn(name: str) -> tuple[subprocess.Popen[bytes], float]:
+    """Budget child for ``name``: the shared state directory on ``PORT`` (see ``spawn_server``)."""
+    target = state_dir()
+    return spawn_server(
+        state_dir=target, port=PORT, log_name=f"budget-{name}.log"
+    )
 
 
 def _rss_mb(pid: int) -> float:
@@ -241,18 +309,18 @@ def _measure_rss() -> Row:
     """RSS of a freshly started server after one served request (performance.md section 1)."""
     proc, launched = _spawn("rss")
     try:
-        _wait_serving(proc, launched, CHILD_STATE_DIR / "budget-rss.log")
+        wait_serving(proc, launched, state_dir() / "budget-rss.log", port=PORT)
         time.sleep(WARMUP_SETTLE_S)  # "after warmup": let the served request settle
         mb = _rss_mb(proc.pid)
     finally:
-        _stop(proc)
+        stop_server(proc)
     return Row("rss", mb, RSS_BUDGET_MB, "MB", mb <= RSS_BUDGET_MB)
 
 
 def _measure_disk() -> Row:
-    """Recursive size of ``LAYA_STATE_DIR`` (HF model cache excluded), in MB."""
-    state_dir = Path(os.environ.get("LAYA_STATE_DIR") or ".")
-    mb = _dir_size(state_dir) / (1024 * 1024)
+    """Recursive size of the shared ``LAYA_STATE_DIR`` (HF model cache excluded), in MB."""
+    root = state_dir()
+    mb = _dir_size(root) / (1024 * 1024)
     return Row("disk", mb, DISK_BUDGET_MB, "MB", mb <= DISK_BUDGET_MB)
 
 
@@ -261,12 +329,14 @@ def _measure_coldstart() -> Row:
     proc, launched = _spawn("coldstart")
     try:
         try:
-            elapsed_ms = _wait_serving(proc, launched, CHILD_STATE_DIR / "budget-coldstart.log")
+            elapsed_ms = wait_serving(
+                proc, launched, state_dir() / "budget-coldstart.log", port=PORT
+            )
         except StartupTimeout as exc:
             print(f"budget_check: {exc}", file=sys.stderr)
             return Row("coldstart", exc.elapsed_ms, COLDSTART_BUDGET_MS, "ms", False)
     finally:
-        _stop(proc)
+        stop_server(proc)
     return Row("coldstart", elapsed_ms, COLDSTART_BUDGET_MS, "ms", elapsed_ms <= COLDSTART_BUDGET_MS)
 
 
@@ -274,7 +344,7 @@ def _measure_idle_cpu() -> Row:
     """Average CPU% of the serving child over a 60 s window with no clients (strict < 2 %)."""
     proc, launched = _spawn("idle-cpu")
     try:
-        _wait_serving(proc, launched, CHILD_STATE_DIR / "budget-idle-cpu.log")
+        wait_serving(proc, launched, state_dir() / "budget-idle-cpu.log", port=PORT)
         time.sleep(WARMUP_SETTLE_S)
         clock_hz = os.sysconf("SC_CLK_TCK")
         ticks_start = _cpu_ticks(proc.pid)
@@ -291,7 +361,7 @@ def _measure_idle_cpu() -> Row:
         # Counters are cumulative: window average = (end - start) ticks / hz / elapsed.
         ticks_end = _cpu_ticks(proc.pid)
     finally:
-        _stop(proc)
+        stop_server(proc)
     cpu_seconds = (ticks_end - ticks_start) / clock_hz
     pct = cpu_seconds / (window_end - window_start) * 100
     return Row("idle-cpu", pct, IDLE_CPU_BUDGET_PCT, "%", pct < IDLE_CPU_BUDGET_PCT)
@@ -309,7 +379,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="budget_check.py",
         description="Assert the LayaWatch resource budgets from docs/performance.md section 1.",
-        epilog="exit codes: 0 all checked budgets pass, 1 breach or impossible measurement, 2 usage",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  .venv/bin/python scripts/budget_check.py rss\n"
+            "  LAYA_STATE_DIR=/tmp/lw-bench .venv/bin/python scripts/budget_check.py all\n"
+            "  .venv/bin/python scripts/budget_check.py disk --json\n"
+            "Every run also writes bench/results/budget-<name>-<timestamp>.json.\n"
+            "exit codes: 0 all checked budgets pass, 1 breach or impossible measurement, 2 usage"
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     common = argparse.ArgumentParser(add_help=False)
@@ -332,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     rows: list[Row] = []
     failure: str | None = None
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    host = environment()
     if not args.json:
         print(_HEADER)
     try:
@@ -339,6 +419,17 @@ def main(argv: list[str] | None = None) -> int:
         for name in names:
             row = _MEASURES[name]()
             rows.append(row)
+            path = write_result(
+                {
+                    "harness": "budget_check",
+                    "subcommand": name,
+                    "timestamp": stamp,
+                    "environment": host,
+                    "budget": row.as_json(),
+                },
+                f"budget-{name}-{stamp}",
+            )
+            print(f"budget_check: wrote {path.relative_to(REPO_ROOT)}", file=sys.stderr)
             if not args.json:
                 print(_table_line(row))
             if not row.passed:

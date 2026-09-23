@@ -25,6 +25,22 @@ Response shapes follow ``docs/api-reference.md`` section 4 and the real router a
 ``FakeAdapter`` derives every value deterministically from its inputs, so the same input yields
 the same output across calls and across threads. One ``threading.Lock`` guards the call counters,
 the loaded-model set and the error-injection budget.
+
+Phase 7 section 4.4 (engine interaction) shapes both adapters:
+
+- ``predict`` accepts a pinned ``lang=`` alongside ``model=``/``task=``. A pinned ``lang``
+  skips detection entirely (the ``lang.detect`` span is absent by design and the trace carries
+  the pinned value; an english-only deployment still detects, because that refusal is the
+  security gate), and an explicit ``model=`` skips ``route.decide`` (also absent by design).
+  Both absences are documented in ``docs/observability-model.md`` section 2.
+- ``RealAdapter`` constructed without an injected engine (the production path) starts a
+  startup worker that stages loading -- the first ``LAYA_MODELS`` checkpoint loads
+  synchronously on first use, the rest are background-prefetched only while the name is in
+  ``LAYA_MODELS``, the 1-minute load average leaves spare cores and ``MemAvailable`` covers
+  the checkpoint -- then runs one warmup forward per resident checkpoint. Every forward runs
+  under ``torch.inference_mode()`` with ``torch.set_num_threads(min(cores, 8))`` applied
+  once when torch is first imported here. Prefetch and warmup events log to the ``engine``
+  log source.
 """
 from __future__ import annotations
 
@@ -33,7 +49,9 @@ import json
 import os
 import threading
 import time
+from collections import deque
 from collections.abc import Sequence
+from contextlib import nullcontext
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -48,8 +66,13 @@ class EngineAdapter(Protocol):
         *,
         model: str | None = None,
         task: str | None = None,
+        lang: str | None = None,
     ) -> dict:
-        """Answer ``questions`` about ``state``; returns the predict shape (see module docs)."""
+        """Answer ``questions`` about ``state``; returns the predict shape (see module docs).
+
+        ``model``/``task``/``lang`` are truthy body overrides; a pinned ``lang`` replaces
+        detection (section 4.4 item 21).
+        """
         ...
 
     def route(self, state: Any, questions: Any) -> dict:
@@ -94,6 +117,9 @@ class FakeAdapter:
     ``predict``/``route`` decisions are derived from the serialized state: ASCII states route as
     English (``lang="en"``), anything else as multilingual (``lang="mul"``), and an explicit
     ``model`` argument overrides the chosen checkpoint while keeping the language detection.
+    A pinned ``lang`` (section 4.4 item 21) replaces the detection pass the way laya's
+    ``route(lang=...)`` does: the result carries the pinned value and English-prefixed pins
+    route to ``english`` when it is known, anything else to ``multilingual``.
     """
 
     def __init__(
@@ -128,12 +154,13 @@ class FakeAdapter:
         *,
         model: str | None = None,
         task: str | None = None,
+        lang: str | None = None,
     ) -> dict:
         self._bump("predict")
         self._gate()
-        chosen, reason, lang = self._decide(state, model)
+        chosen, reason, lang_code = self._decide(state, model, lang)
         answers = {name: self._answer(state, name, spec) for name, spec in questions.items()}
-        return {"answers": answers, "model": chosen, "route_reason": reason, "lang": lang}
+        return {"answers": answers, "model": chosen, "route_reason": reason, "lang": lang_code}
 
     def route(self, state: Any, questions: Any) -> dict:
         self._bump("route")
@@ -185,14 +212,22 @@ class FakeAdapter:
         if failure is not None:
             raise failure
 
-    def _decide(self, state: Any, override: str | None) -> tuple[str, str, str]:
+    def _decide(
+        self, state: Any, override: str | None, lang_pin: str | None = None
+    ) -> tuple[str, str, str]:
         ascii_state = _stable(state).isascii()
-        lang = "en" if ascii_state else "mul"
+        if lang_pin is None:
+            lang = "en" if ascii_state else "mul"
+            englishish = ascii_state
+            reason = "state is English" if ascii_state else "state is not English"
+        else:
+            lang = str(lang_pin)
+            englishish = lang.lower().split("-")[0] in ("en", "eng", "english")
+            reason = f"explicit lang={lang!r}"
         if override is not None:
             return override, f"model override: {override}", lang
-        preferred = "english" if ascii_state else "multilingual"
+        preferred = "english" if englishish else "multilingual"
         model = preferred if preferred in self._known else self._known[0]
-        reason = "state is English" if ascii_state else "state is not English"
         return model, reason, lang
 
     def _answer(self, state: Any, name: str, spec: Any) -> dict:
@@ -349,45 +384,75 @@ class _NullSpans:
 _NULL_SPAN = _NullSpan()
 _NULL_SPANS = _NullSpans()
 
+# Section 4.4 item 20: the smallest state/question pair that still takes the tokenizer,
+# collation and decision heads through their first-trip allocations.
+_WARMUP_STATE = {"body": "warmup"}
+_WARMUP_QUESTIONS = {
+    "warmup": {
+        "type": "choice",
+        "instructions": "warm up the checkpoint",
+        "criteria": {"ok": None, "skip": None},
+    }
+}
+
 
 class RealAdapter:
     """EngineAdapter over the real ``laya.Router``, constructed exactly as ``legacy/serve.py`` did.
 
-    Nothing touches laya or torch until the first predict/route/load call; that first call
-    reaches the same end state as the legacy module import, but observable: ``Router(device=...)``
-    is always built cold (``preload=False``) and every requested checkpoint loads inside its own
-    ``model.load`` span, so a first request's cold load lands in the trace instead of inflating
-    ``framework_ms``. An exact ``["all"]`` list expands to the whole catalog; any other list is
+    Nothing touches laya or torch until the first predict/route/load call (or, on the
+    production path where no engine is injected, until the startup worker started in
+    ``__init__``); that first call reaches the same end state as the legacy module import,
+    but observable: ``Router(device=...)``
+    is always built cold (``preload=False``) and the first checkpoint loads inside its own
+    ``model.load`` span, so a first request's cold load lands in the trace instead of
+    inflating
+    ``framework_ms``. The remaining ``LAYA_MODELS`` checkpoints stage for the section 4.4
+    item 22 background prefetch (idle CPU plus ``MemAvailable`` gated, ``model.load`` spans
+    belong to traces so a background load records itself in the ``engine`` log instead) and
+    every resident checkpoint gets one warmup forward (item 20). An exact ``["all"]`` list
+    expands to the whole catalog; any other list is
     normalised through ``engine.router.normalise_name`` when the engine surface exposes it (the
     configured name passes through otherwise -- ``Router.preload`` still validates it and a
     ValueError names an unknown checkpoint, as the legacy ``preload(models)`` call did), and the
-    multilingual pop under english_only still runs after the preload. Checkpoints the router
+    multilingual pop under english_only still runs after the staging. Checkpoints the router
     already reports as loaded are skipped entirely: no span, no call -- ``model.load`` records
     loads, not warm routers. The LRU cap ``max_loaded`` is raised to the full list before the
-    per-checkpoint loop because laya's ``Router.preload`` only raises it per call -- loading one
+    staging load because laya's ``Router.preload`` only raises it per call -- loading one
     name at a time would otherwise evict the checkpoints built moments earlier; the end state
-    matches one legacy ``preload(list)`` call. Callers wanting a warm start touch the adapter at
-    boot; loaded()/device() never construct the engine, so ``GET /healthz`` can never trigger a
+    matches one legacy ``preload(list)`` call. ``_resident_agent`` still loads a routed
+    checkpoint on demand, so correctness never depends on the prefetch queue draining.
+    loaded()/device() never construct the engine, so ``GET /healthz`` can never trigger a
     model download.
 
     Spans, through the injected ``spans`` object (None = internal no-op; the object also exposes
     ``set`` and ``event``, so it can be the recorder context itself or a per-thread dispatcher):
 
     - predict: ``lang.detect``, ``route.decide``, ``queue.wait``, ``forward``, ``serialize`` in
-      that order -- the five warm-engine spans. ``model.load`` appears only when a checkpoint is
-      actually built: during first-use construction (before ``lang.detect``, one span per
-      checkpoint, on whichever request thread triggered the construction) or, for a routed model
+      that order -- the five warm-engine spans. ``lang.detect`` is absent by design when the
+      client pins ``lang=`` (the trace carries the pin; english-only deployments still detect
+      and record it, because that refusal is the security gate) and ``route.decide`` is
+      absent by design when the client pins ``model=`` -- both documented in
+      ``docs/observability-model.md`` section 2. ``model.load`` appears only when a checkpoint
+      is actually built: during first-use construction (before ``lang.detect``, one span per
+      checkpoint, on whichever thread triggered the construction) or, for a routed model
       outside the configured preload list, between ``queue.wait`` and ``forward`` via
-      ``_resident_agent``. Detection and routing run before the serialization lock; the lock
-      guards load + forward + serialize, which is exactly the forward-pass serialization
-      legacy's ``_predict_lock`` existed for (routing stays parallel, as it always was on the
-      lock-free ``/route`` path).
-    - route: ``lang.detect`` and ``route.decide`` only; no lock, like legacy ``/route``.
+      ``_resident_agent``; a background prefetch load has no trace to join and logs to the
+      ``engine`` source instead. Detection and routing run before the serialization lock; the
+      lock guards load + forward + serialize, which is exactly the forward-pass serialization
+      legacy's ``_predict_lock`` existed for (routing stays parallel, as it always was on
+      the lock-free ``/route`` path). Forwards run inside ``torch.inference_mode()`` on the
+      real engine (section 4.4 item 19).
+    - route: ``lang.detect`` and ``route.decide`` only, no lock, like legacy ``/route``.
+      The endpoint never carries ``model=``/``lang=`` pins, so both spans are unconditional
+      here.
 
     The recorder validates span attributes when a span opens, so spans whose attributes are the
     *output* of the work they time (``lang.detect``, ``route.decide``) run that work twice: once
     for the result and attributes, once inside the timed span. Both passes are pure and cost
     microseconds (docs/architecture.md section 3) against a forward pass of hundreds of ms.
+    Section 4.4 item 21 removes those second passes where the work can be skipped outright: a
+    pinned ``lang`` runs detection zero times (except under english_only) and an explicit
+    ``model=`` runs ``router.route`` once, untimed, because the pin is already the decision.
 
     Results are the uniform api-reference shapes shared with FakeAdapter (module docs): predict
     returns answers/model/route_reason/lang plus the engine's ``usage`` passthrough; route
@@ -434,6 +499,20 @@ class RealAdapter:
         self._predict_lock = threading.Lock()  # legacy _predict_lock: one forward pass
         self._inflight_lock = threading.Lock()
         self._inflight = 0
+        # Section 4.4 items 20/22: staged LAYA_MODELS names waiting for background load,
+        # checkpoints already given their one warmup pass, the single-worker guard, the
+        # inference_mode factory (set only when torch is imported on the real path), and
+        # whether this adapter runs the startup worker (production: no injected engine).
+        self._prefetch_queue: deque[str] = deque()
+        self._configured: set[str] = set()
+        self._warmed: set[str] = set()
+        self._worker_lock = threading.Lock()
+        self._inference_factory: Any = None
+        self._worker_enabled = engine is None
+        if self._worker_enabled:
+            threading.Thread(
+                target=self._startup_worker, name="layawatch-engine-warmup", daemon=True
+            ).start()
 
     def predict(
         self,
@@ -442,9 +521,11 @@ class RealAdapter:
         *,
         model: str | None = None,
         task: str | None = None,
+        lang: str | None = None,
     ) -> dict:
         router = self._ensure()
-        decision, lang_code = self._decide(router, state, questions, model, task)
+        self._kick_worker()  # staged checkpoint still waiting? cheap no-op once drained
+        decision, lang_code = self._decide(router, state, questions, model, task, lang)
         with self._inflight_lock:
             self._inflight += 1
             depth = self._inflight - 1
@@ -463,7 +544,10 @@ class RealAdapter:
                     device=str(router.device or "auto"),
                 ):
                     try:
-                        result = agent.system_one(state, questions)
+                        # Item 19: every forward pass runs under torch.inference_mode()
+                        # (a no-op context for injected engines, which have no torch).
+                        with self._inference():
+                            result = agent.system_one(state, questions)
                     except KeyError as exc:
                         # P1-I2: engine schema gaps (question missing "type") are
                         # client errors: ValueError -> _guard answers 400, not 500.
@@ -487,7 +571,7 @@ class RealAdapter:
 
     def route(self, state: Any, questions: Any) -> dict:
         router = self._ensure()
-        decision, lang_code = self._decide(router, state, questions, None, None)
+        decision, lang_code = self._decide(router, state, questions, None, None, None)
         return {"model": decision["model"], "reason": decision["reason"], "lang": lang_code}
 
     def loaded(self) -> list[str]:
@@ -523,12 +607,23 @@ class RealAdapter:
             self._lifecycle_lock.release()
 
     def unload(self, models: list[str]) -> None:
-        """Unload checkpoints under the lifecycle guard; resident names not listed are untouched."""
+        """Unload checkpoints under the lifecycle guard; resident names not listed are untouched.
+
+        A successful unload also cancels any pending background prefetch of the same name
+        (queue entries are normalised, so the request names are normalised the same way).
+        """
         self._acquire_lifecycle()
         try:
             router = self._ensure()
             for name in models:
                 router.unload(name)
+            normalise = getattr(getattr(self._engine, "router", None), "normalise_name", None)
+            for name in models:
+                key = name if normalise is None else normalise(name)
+                try:
+                    self._prefetch_queue.remove(key)
+                except ValueError:
+                    continue  # never staged (or already resident): nothing to cancel
         finally:
             self._lifecycle_lock.release()
 
@@ -541,9 +636,13 @@ class RealAdapter:
     def _ensure(self) -> Any:
         """Construct the Router on first engine use; laya is imported inside, never above.
 
-        Always builds with ``preload=False`` and loads each checkpoint inside its own
-        ``model.load`` span, so the potentially minutes-long cold load that happens to fall on
-        the first request is attributed to real observations instead of framework overhead.
+        Always builds with ``preload=False``. The first requested checkpoint loads inside
+        its own ``model.load`` span, so the potentially minutes-long cold load that happens
+        to fall on the first request is attributed to real observations instead of framework
+        overhead; the remaining names stage in ``_prefetch_queue`` for the section 4.4
+        background worker (production only -- injected engines stay synchronous-free and
+        ``_resident_agent`` covers any routed gap on demand). On the real path this also
+        applies item 19 once: capped torch threads plus the ``inference_mode`` factory.
         """
         router = self._router
         if router is not None:
@@ -556,6 +655,7 @@ class RealAdapter:
                 import laya
 
                 engine = self._engine = laya
+                self._configure_torch()
             requested = ["english"] if self._english_only else list(self._models)
             router = engine.Router(device=self._device, preload=False)
             if requested == ["all"]:
@@ -563,6 +663,7 @@ class RealAdapter:
             else:
                 normalise = getattr(getattr(engine, "router", None), "normalise_name", None)
                 names = [name if normalise is None else normalise(name) for name in requested]
+            self._configured = set(names)
             # Only checkpoints that are not resident yet actually load -- and a vocabulary
             # model.load fires "only when a checkpoint loads", never for an already-warm router.
             to_load = [name for name in names if name not in router.loaded]
@@ -572,9 +673,10 @@ class RealAdapter:
                 # built a moment earlier. Raise it to the full list first: same end state as one
                 # legacy preload(names) call.
                 router.max_loaded = max(int(getattr(router, "max_loaded", 1)), len(names))
-                for name in to_load:
-                    with self._spans.span("model.load", **_load_attrs(router, name)):
-                        router.preload([name])
+                first, *rest = to_load  # item 22: sync first, prefetch the rest
+                with self._spans.span("model.load", **_load_attrs(router, first)):
+                    router.preload([first])
+                self._prefetch_queue.extend(rest)
             if self._english_only:
                 router.models.pop("multilingual", None)  # belt: explicit model= cannot load it
             self._router = router
@@ -587,27 +689,42 @@ class RealAdapter:
         questions: Any,
         model: str | None,
         task: str | None,
+        lang: str | None,
     ) -> tuple[dict, str]:
         """Detect, refuse under english_only, route; emit both spans and set the trace fields.
 
-        The decision used is the first, untimed route pass; the timed second pass must be pure --
-        Router.route loads and runs nothing (laya/router.py: "without loading or running
-        anything").
+        Section 4.4 item 21: a pinned ``lang`` skips ``lang.detect`` altogether -- no span,
+        no ``analyse`` call, the trace carries the pin -- unless ``english_only`` is on,
+        where detection is the 422 gate and still runs and records exactly as before. An
+        explicit ``model=`` skips ``route.decide``: ``router.route`` still answers once,
+        untimed (the decision, reason and workflow must not change), but the timed second
+        pass and its span go away because the pin *is* the decision. The passes that remain
+        must be pure -- Router.route loads and runs nothing (laya/router.py: "without loading
+        or running anything").
         """
         engine = self._engine
-        det = engine.lang.analyse(state)
-        lang_code = _lang_code(det)
-        with self._spans.span("lang.detect", lang=lang_code, confidence=_detect_confidence(det)):
-            engine.lang.analyse(state)  # timed pass; attributes must exist before the span opens
-        self._refuse_when_english_only(det, model, engine)
-        decision = router.route(state, questions, model=model, task=task)
-        with self._spans.span(
-            "route.decide",
-            model=decision["model"],
-            reason=decision["reason"],
-            typed_workflow=bool(decision.get("workflow")),
-        ):
-            router.route(state, questions, model=model, task=task)  # timed pass; see docstring
+        pin = None if lang is None else str(lang)
+        det: dict | None = None
+        if pin is None or self._english_only:
+            det = engine.lang.analyse(state)
+            lang_code = _lang_code(det)
+            with self._spans.span(
+                "lang.detect", lang=lang_code, confidence=_detect_confidence(det)
+            ):
+                engine.lang.analyse(state)  # timed pass; attributes must exist before it opens
+            self._refuse_when_english_only(det, model, engine)
+        else:
+            lang_code = pin
+        route_kwargs = {} if pin is None else {"lang": pin}
+        decision = router.route(state, questions, model=model, task=task, **route_kwargs)
+        if model is None:  # explicit model= : the pin is the decision, no span (item 21)
+            with self._spans.span(
+                "route.decide",
+                model=decision["model"],
+                reason=decision["reason"],
+                typed_workflow=bool(decision.get("workflow")),
+            ):
+                router.route(state, questions, model=model, task=task, **route_kwargs)
         self._spans.set(
             model=decision["model"],
             route_reason=decision["reason"],
@@ -655,3 +772,154 @@ class RealAdapter:
             raise RuntimeError(
                 "a model load or unload is already in flight; retry when it finishes"
             )
+
+    # ------------------------------------------- startup warmup and prefetch (section 4.4)
+    def _startup_worker(self) -> None:
+        """Build, stage and warm the engine; one run at a time (items 20 and 22).
+
+        Drains ``_prefetch_queue`` while the gates hold -- the name in ``LAYA_MODELS``, a
+        spare core on the 1-minute load average, ``MemAvailable`` covering
+        ``GB_PER_CHECKPOINT``, no admin load/unload in flight -- and gives every resident
+        checkpoint its single warmup forward. Warmup runs under the predict lock so a
+        concurrent request queues behind it instead of running two forwards at once. Any
+        failure logs to the ``engine`` source and ends this run; the next ``predict``
+        re-kicks the worker while anything is still queued.
+        """
+        if not self._worker_lock.acquire(blocking=False):
+            return  # another worker (startup or a previous kick) is already running
+        from layawatch.log import get_logger
+
+        log = get_logger("engine")
+        try:
+            router = self._ensure()
+            while True:
+                self._warm_resident(router, log)
+                if not self._prefetch_queue:
+                    break
+                name = self._prefetch_queue[0]
+                if name in router.loaded:
+                    self._prefetch_queue.popleft()
+                    continue
+                if not self._prefetch_gates(name, log):
+                    break
+                if not self._lifecycle_lock.acquire(blocking=False):
+                    log.debug(
+                        f"engine: prefetch of {name} deferred (admin load/unload in flight)"
+                    )
+                    break
+                started = time.perf_counter()
+                try:
+                    router.preload([name])
+                finally:
+                    self._lifecycle_lock.release()
+                self._prefetch_queue.popleft()
+                log.info(
+                    f"engine: prefetched {name} in "
+                    f"{(time.perf_counter() - started) * 1000.0:.0f} ms"
+                )
+        except Exception as exc:  # a failed warmup must be logged, never fatal
+            log.warning(f"engine: startup warmup/prefetch stopped: {exc!r}")
+        finally:
+            self._worker_lock.release()
+
+    def _kick_worker(self) -> None:
+        """Re-spawn the worker when a staged checkpoint waits and the gates hold right now.
+
+        Called once per ``predict``; after the queue drains it is one attribute check. The
+        pre-gate is silent (``log=None``), so a starved box pays neither a thread spawn nor
+        a log line per request; when it runs, the worker logs the authoritative skip itself.
+        """
+        if not self._worker_enabled or not self._prefetch_queue:
+            return
+        if self._worker_lock.locked():
+            return
+        if not self._prefetch_gates(self._prefetch_queue[0], None):
+            return
+        threading.Thread(
+            target=self._startup_worker, name="layawatch-engine-warmup", daemon=True
+        ).start()
+
+    def _prefetch_gates(self, name: str, log: Any) -> bool:
+        """Section 4.4 item 22 gates: ``LAYA_MODELS`` membership, idle CPU, RAM guard.
+
+        Membership is checked against the normalised configured set (an exact ``["all"]``
+        expands to the catalog in ``_ensure``). Idle means the 1-minute load average still
+        leaves a spare core; the RAM guard is the same MemAvailable floor ``load()`` uses.
+        An unreadable ``/proc/loadavg`` cannot prove idleness, so it defers the prefetch; an
+        unknown ``MemAvailable`` passes it, matching ``load()``'s floor check.
+        """
+        if name not in self._configured:
+            if log is not None:
+                log.debug(f"engine: prefetch of {name} skipped (not in LAYA_MODELS)")
+            return False
+        cores = (
+            len(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else (os.cpu_count() or 1)
+        )
+        try:
+            with open("/proc/loadavg") as fh:
+                load1 = float(fh.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            if log is not None:
+                log.debug(f"engine: prefetch of {name} deferred (loadavg unreadable)")
+            return False
+        if load1 >= cores:
+            if log is not None:
+                log.debug(
+                    f"engine: prefetch of {name} deferred "
+                    f"(1-min load {load1:.2f} leaves no spare core of {cores})"
+                )
+            return False
+        available = _mem_available()
+        if available is not None and available < GB_PER_CHECKPOINT:
+            if log is not None:
+                log.debug(
+                    f"engine: prefetch of {name} deferred "
+                    f"(MemAvailable {available / 1024**3:.1f} GB < "
+                    f"{GB_PER_CHECKPOINT / 1024**3:.1f} GB)"
+                )
+            return False
+        return True
+
+    def _warm_resident(self, router: Any, log: Any) -> None:
+        """One warmup forward per resident, not-yet-warmed checkpoint (item 20), ever.
+
+        The pass runs under the predict lock (one forward at a time, exactly like a
+        request) inside ``torch.inference_mode()`` on the real engine, so tokenizer and
+        lazy-buffer first-trip costs never land on a real request. Checkpoints that are
+        still only queued stay cold until they load -- there is nothing to warm yet.
+        """
+        for name in list(router.loaded):
+            if name in self._warmed:
+                continue
+            started = time.perf_counter()
+            with self._predict_lock, self._inference():
+                router.load(name).system_one(_WARMUP_STATE, _WARMUP_QUESTIONS)
+            self._warmed.add(name)
+            log.info(
+                f"engine: warmed {name} in {(time.perf_counter() - started) * 1000.0:.0f} ms"
+            )
+
+    def _inference(self) -> Any:
+        """Forward context: ``torch.inference_mode()`` on the real engine, no-op otherwise."""
+        factory = self._inference_factory
+        return nullcontext() if factory is None else factory()
+
+    def _configure_torch(self) -> None:
+        """Section 4.4 item 19, applied once when the real engine first imports torch.
+
+        Caps intra-op threads at ``min(cores, 8)`` (affinity-aware) to stop BLAS
+        oversubscription on big hosts, and exposes ``torch.inference_mode`` for every
+        forward (predict and warmup). Never reached for injected engines: tests keep torch
+        out of the process entirely.
+        """
+        import torch
+
+        cores = (
+            len(os.sched_getaffinity(0))
+            if hasattr(os, "sched_getaffinity")
+            else (os.cpu_count() or 1)
+        )
+        torch.set_num_threads(min(cores, 8))
+        self._inference_factory = torch.inference_mode

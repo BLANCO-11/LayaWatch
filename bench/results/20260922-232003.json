@@ -1,0 +1,47 @@
+{
+  "harness": "bench",
+  "subcommand": "static",
+  "timestamp": "20260922-232003",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.8,
+      0.89,
+      0.93
+    ],
+    "sqlite": "3.53.1"
+  },
+  "series": {
+    "static_asset": {
+      "p50": 1.035,
+      "p90": 1.237,
+      "p95": 1.363,
+      "p99": 1.687,
+      "max": 1.911,
+      "n": 100
+    },
+    "static_conditional_304": {
+      "p50": 0.854,
+      "p90": 1.122,
+      "p95": 1.214,
+      "p99": 1.386,
+      "max": 1.482,
+      "n": 100
+    }
+  },
+  "budgets": {
+    "static": {
+      "limit": 5.0,
+      "unit": "ms",
+      "value": 1.363,
+      "pass": true,
+      "note": "/_next/static/chunks/0-fgc7lu98d9c.js; conditional re-requests: 100/100 returned 304"
+    }
+  },
+  "scalars": {
+    "conditional_304": 100,
+    "conditional_requests": 100
+  }
+}

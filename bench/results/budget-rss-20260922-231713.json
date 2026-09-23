@@ -1,0 +1,23 @@
+{
+  "harness": "budget_check",
+  "subcommand": "rss",
+  "timestamp": "20260922-231713",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.75,
+      0.97,
+      0.97
+    ],
+    "sqlite": "3.53.1"
+  },
+  "budget": {
+    "name": "rss",
+    "value": 50.031,
+    "budget": 120.0,
+    "unit": "MB",
+    "pass": true
+  }
+}

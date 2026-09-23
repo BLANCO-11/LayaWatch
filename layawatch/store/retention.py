@@ -24,7 +24,8 @@ write lock - docs/performance.md section 4.3 items 16/17):
    than 30 days past. ``audit_log`` is never pruned.
 4. Commit, then ``PRAGMA wal_checkpoint(TRUNCATE)`` when the writer queue is idle
    (the optional ``queue_idle`` callable reports idleness; omitted means idle), then
-   VACUUM only when freelist bytes exceed ``free_page_pct`` of the file.
+   VACUUM only when freelist bytes exceed ``free_page_pct`` of the file, then
+   ``PRAGMA optimize`` (docs/performance.md section 4.3 item 18).
 
 Returns a dict of per-action counts. ``run_forever`` drives it from the retention timer.
 """
@@ -50,7 +51,9 @@ from layawatch.store.queries import (
 
 _LOG = get_logger("retention")
 
-_DELETE_CHUNK = 1000
+#: Rows per statement in every chunked delete/update loop, committed per chunk so no
+#: statement holds a long write lock (docs/performance.md section 4.3 item 16).
+_DELETE_CHUNK = 500
 _BUCKET_STEP = 10
 _PARENT_STEPS = (60, 3600)
 _SESSION_GRACE_DAYS = 30
@@ -331,6 +334,7 @@ def apply(
     conn.commit()
     counts["wal_checkpointed"] = _checkpoint(conn, queue_idle)
     counts["vacuumed"] = _maybe_vacuum(conn, free_page_pct)
+    db.optimize(conn)  # 4.3 item 18: PRAGMA optimize after the bulk deletes
     return counts
 
 

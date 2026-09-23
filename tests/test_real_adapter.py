@@ -326,8 +326,13 @@ def test_first_use_constructs_the_legacy_router() -> None:
     assert engine.ctor_calls == []  # nothing built at construction time
     adapter.predict(STATE, QUESTIONS)
     assert engine.ctor_calls == [{"device": "cpu", "preload": False}]
-    # one Router.preload([name]) per checkpoint, each inside its own model.load span
-    assert engine.preload_calls == [["english"], ["multilingual"]]
+    # Section 4.4 item 22: staged loading - the first configured checkpoint loads
+    # synchronously (in its own model.load span); the rest wait in the prefetch queue,
+    # which only the production startup worker drains (injected engines have none, and
+    # _resident_agent still loads a routed gap on demand).
+    assert engine.preload_calls == [["english"]]
+    assert adapter.loaded() == ["english"]
+    assert list(adapter._prefetch_queue) == ["multilingual"]
 
 
 def test_all_models_spans_each_checkpoint_and_keeps_the_ctor_cold(tmp_path, monkeypatch) -> None:
@@ -339,18 +344,23 @@ def test_all_models_spans_each_checkpoint_and_keeps_the_ctor_cold(tmp_path, monk
     adapter.route(STATE, QUESTIONS)
     trace = ctx.finish(200)
 
-    # The constructor flag stays cold: each checkpoint loads via Router.preload([name]) under a
-    # model.load span, so a first request records the load instead of framework_ms.
+    # The constructor flag stays cold: the first checkpoint loads via Router.preload([name])
+    # under a model.load span, so a first request records the load instead of framework_ms.
     assert engine.ctor_calls == [{"device": "cpu", "preload": False}]
-    assert engine.preload_calls == [[name] for name in CATALOG]
+    # Section 4.4 item 22: only the first catalog checkpoint loads on this request; the
+    # rest stage for background prefetch (the production startup worker drains the queue;
+    # this injected engine has none, and route() needed no other checkpoint).
+    first, *rest = list(CATALOG)
+    assert engine.preload_calls == [[first]]
     names = [obs.name for obs in trace.observations]
-    assert names == ["model.load"] * len(CATALOG) + ["lang.detect", "route.decide"]
-    for name, obs in zip(CATALOG, trace.observations[: len(CATALOG)]):
-        assert obs.meta == {"model": name, "from": "hub"}
-        assert vocabulary.validate("model.load", obs.meta) == obs.meta
-        assert obs.parent_id is None
-    assert engine.router_instance._order == list(CATALOG)
-    # LRU cap raised to the whole list first, so the per-name loop cannot evict earlier loads.
+    assert names == ["model.load"] + ["lang.detect", "route.decide"]
+    load = trace.observations[0]
+    assert load.meta == {"model": first, "from": "hub"}
+    assert vocabulary.validate("model.load", load.meta) == load.meta
+    assert load.parent_id is None
+    assert engine.router_instance._order == [first]
+    assert list(adapter._prefetch_queue) == rest
+    # LRU cap raised to the whole list first, so prefetched loads cannot evict this one.
     assert engine.router_instance.max_loaded >= len(CATALOG)
 
 
@@ -795,8 +805,13 @@ def test_predict_model_override_flows_into_result_and_trace() -> None:
     assert result["route_reason"] == "explicit model='multilingual'"
     assert trace.model == "multilingual"
     assert trace.route_reason == "explicit model='multilingual'"
-    decide = next(o for o in trace.observations if o.name == "route.decide")
-    assert decide.meta["model"] == "multilingual"
+    # Section 4.4 item 21: route.decide is absent by design when model= is explicit
+    # (documented in docs/observability-model.md section 2). The decision still comes
+    # from one untimed Router.route call, so the reason text is unchanged; lang was not
+    # pinned, so detection still ran and recorded.
+    names = [obs.name for obs in trace.observations]
+    assert "route.decide" not in names
+    assert "lang.detect" in names
 
 
 def test_english_only_refusal_records_detection_but_no_forward() -> None:

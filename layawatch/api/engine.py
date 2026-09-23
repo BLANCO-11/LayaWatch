@@ -38,6 +38,7 @@ def add_engine_routes(router: Router, adapter: EngineAdapter) -> None:
                 payload["questions"],
                 model=_param(payload, "model"),
                 task=_param(payload, "task"),
+                lang=_param(payload, "lang"),
             )
         )
         _record_result(result)

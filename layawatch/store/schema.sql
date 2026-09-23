@@ -24,10 +24,10 @@ CREATE TABLE traces (
   tags          TEXT,                        -- JSON array
   meta          TEXT                         -- JSON object
 );
-CREATE INDEX traces_ts ON traces(ts_start DESC);
-CREATE INDEX traces_status_ts ON traces(status, ts_start DESC);
-CREATE INDEX traces_route_ts ON traces(route, ts_start DESC);
-CREATE INDEX traces_model_ts ON traces(model, ts_start DESC);
+CREATE INDEX traces_ts ON traces(ts_start DESC, id DESC);
+CREATE INDEX traces_status_ts ON traces(status, ts_start DESC, id DESC);
+CREATE INDEX traces_route_ts ON traces(route, ts_start DESC, id DESC);
+CREATE INDEX traces_model_ts ON traces(model, ts_start DESC, id DESC);
 
 CREATE TABLE observations (
   id          TEXT PRIMARY KEY,
@@ -43,7 +43,7 @@ CREATE TABLE observations (
   output      TEXT,
   meta        TEXT
 );
-CREATE INDEX observations_trace ON observations(trace_id, start_ms);
+CREATE INDEX observations_trace ON observations(trace_id, start_ms, id);
 
 CREATE TABLE scores (
   id        TEXT PRIMARY KEY,
@@ -81,7 +81,7 @@ CREATE TABLE log_entry (
   trace_id TEXT,
   message  TEXT NOT NULL
 );
-CREATE INDEX log_ts ON log_entry(ts DESC);
+CREATE INDEX log_ts ON log_entry(ts DESC, id DESC);
 
 CREATE TABLE users (
   id            TEXT PRIMARY KEY,
@@ -130,7 +130,7 @@ CREATE TABLE audit_log (
   result   TEXT NOT NULL,                    -- ok | denied | error
   meta     TEXT
 );
-CREATE INDEX audit_ts ON audit_log(ts DESC);
+CREATE INDEX audit_ts ON audit_log(ts DESC, id DESC);
 
 CREATE TABLE settings (
   key        TEXT PRIMARY KEY,

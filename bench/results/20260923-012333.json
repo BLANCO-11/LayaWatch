@@ -1,0 +1,46 @@
+{
+  "harness": "bench",
+  "subcommand": "sse",
+  "timestamp": "20260923-012333",
+  "environment": {
+    "host": "ML-AZ-CI-AICOE-VM-Foundry-1",
+    "python": "3.12.14",
+    "cpus": 4,
+    "loadavg": [
+      0.59,
+      0.74,
+      0.69
+    ],
+    "sqlite": "3.53.1"
+  },
+  "series": {
+    "sse_tick": {
+      "p50": 16.813,
+      "p90": 17.324,
+      "p95": 17.511,
+      "p99": 17.511,
+      "max": 17.511,
+      "n": 12
+    }
+  },
+  "budgets": {
+    "sse_tick": {
+      "limit": 5.0,
+      "unit": "ms",
+      "value": 17.511,
+      "pass": false,
+      "note": "per wave: max-min arrival delta across data-fed clients, each client's clock anchored on its own hello frame; first 2 waves skipped"
+    }
+  },
+  "scalars": {
+    "clients_requested": 20,
+    "clients_registered": 20,
+    "clients_data_fed": 20,
+    "clients_starved": 0,
+    "clients_rejected": 0,
+    "rejection_codes": [],
+    "stream_executor_workers": 8,
+    "waves_measured": 12,
+    "window_s": 45.0
+  }
+}

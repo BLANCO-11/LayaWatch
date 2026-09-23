@@ -55,9 +55,13 @@ _SETTABLE_FIELDS = frozenset(
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class Observation:
-    """One timed or instantaneous unit of work; column-for-column the ``observations`` table."""
+    """One timed or instantaneous unit of work; column-for-column the ``observations`` table.
+
+    ``__slots__`` (4.2 item 6): this is the span record - nine are allocated per request,
+    so no per-instance ``__dict__``.
+    """
 
     id: str
     trace_id: str
@@ -87,9 +91,12 @@ class Score:
     ts: float
 
 
-@dataclass
+@dataclass(slots=True)
 class Trace:
-    """One finished request; field names match the ``traces`` table column for column."""
+    """One finished request; field names match the ``traces`` table column for column.
+
+    ``__slots__`` (4.2 item 6): one allocation set per finished request, no ``__dict__``.
+    """
 
     id: str
     ts_start: float
@@ -366,10 +373,9 @@ class Context:
         if getattr(_local, "ctx", None) is self:
             _local.ctx = None
         duration = max(0.0, (time.perf_counter() - self._t0) * 1000.0)
-        for obs in self._stack:  # spans leaked without an exit still close consistently
-            obs.duration_ms = max(0.0, duration - obs.start_ms)
-        self._stack.clear()
-        # One draw per trace keeps the seeded decision sequence independent of the error mix.
+        # One draw per trace, taken before any span assembly (4.2 item 10): a sampled-out
+        # success is rejected here and never pays the observation loops below. The single
+        # draw keeps the seeded decision sequence independent of the error mix.
         draw = self._recorder._rng.random()
         caller_meta = self._fields.get("meta") or {}
         always_keep = (
@@ -379,13 +385,20 @@ class Context:
             or caller_meta.get("source") == "playground"
         )
         keep = always_keep or draw < self._recorder.sample_rate
-        top_level = 0.0
-        for obs in self._observations:
-            if obs.parent_id is None:
-                top_level += obs.duration_ms
-        framework = duration - top_level
-        if framework < 0.0:  # overlapping top-level spans can only overshoot the sum
-            framework = 0.0
+        observations: list[Observation] = []
+        framework = duration  # no kept spans: the totals rule sums over the trace's own spans
+        if keep:
+            for obs in self._stack:  # spans leaked without an exit still close consistently
+                obs.duration_ms = max(0.0, duration - obs.start_ms)
+            top_level = 0.0
+            for obs in self._observations:
+                if obs.parent_id is None:
+                    top_level += obs.duration_ms
+            framework = duration - top_level
+            if framework < 0.0:  # overlapping top-level spans can only overshoot the sum
+                framework = 0.0
+            observations = list(self._observations)
+        self._stack.clear()
         meta = dict(caller_meta)
         meta["framework_ms"] = framework
         meta["payload_capture"] = self._recorder.capture
@@ -410,7 +423,7 @@ class Context:
             error_message=self._fields.get("error_message"),
             tags=list(self._fields.get("tags") or ()),
             meta=meta,
-            observations=list(self._observations) if keep else [],
+            observations=observations,
             scores=[],
         )
         recorder = self._recorder
@@ -516,11 +529,19 @@ class Recorder:
         return ctx
 
     def ring_traces(self, n: int | None = None) -> list[Trace]:
-        """Ring snapshot oldest to newest; ``n`` keeps the newest entries (like log ring_entries)."""
+        """Ring snapshot oldest to newest; ``n`` keeps the newest entries (like log ring_entries).
+
+        Index-snapshot read (4.2 item 8): under the lock only the ``n`` newest slots are
+        copied out by index - never the whole ring - so a tick hands off bounded work.
+        """
         with self._ring_lock:
-            items = list(self._ring)
-        if n is not None and n >= 0:
-            items = items[-n:] if n else []
+            length = len(self._ring)
+            if n is None or n < 0 or n >= length:
+                items = list(self._ring)
+            elif n == 0:
+                items = []
+            else:
+                items = [self._ring[i] for i in range(length - n, length)]
         return items
 
     def trace_provider(self) -> Callable[[], str | None]:

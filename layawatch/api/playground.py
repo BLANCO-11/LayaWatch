@@ -132,6 +132,7 @@ def add_playground_routes(
                     payload["questions"],
                     model=_param(payload, "model"),
                     task=_param(payload, "task"),
+                    lang=_param(payload, "lang"),
                 )
             )
             ctx.set(
