@@ -27,7 +27,7 @@ root
 state.sqlite3*
 secret.key
 api_keys.json*
-.env
+.env*
 # data/ ships ONLY the password deny list; runtime state must never bake in
 data/*
 !data/common_passwords.txt

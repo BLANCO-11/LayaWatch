@@ -54,8 +54,9 @@ cd web && npm ci && npm run build && cd ..        # produces web/out
 python -m layawatch                               # serves http://127.0.0.1:8050
 ```
 
-Local knobs (owner bootstrap, port, bind) live in `.env` at the repo root — it is loaded
-at boot, never committed and never baked into the image; real environment variables win.
+Local knobs (owner bootstrap, port, bind) live in `.env` at the repo root — copy
+`.env.example` to `.env` and edit; it is loaded at boot, never committed and never
+baked into the image, and real environment variables win.
 
 **systemd:** install `layawatch.service` per `docs/operations.md` section 2.3
 (`sudo cp layawatch.service /etc/systemd/system/ && sudo systemctl daemon-reload &&
